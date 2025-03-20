@@ -1,0 +1,158 @@
+Resources:
+  TamnoonTrustRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: 'tamnoon-trust-role'
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Action: 'sts:AssumeRole'
+            Effect: Allow
+            Principal:
+              AWS: !Ref TamnoonServiceCloudAccountARN
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/SecurityAudit'
+        - 'arn:aws:iam::aws:policy/job-function/ViewOnlyAccess'
+        - 'arn:aws:iam::aws:policy/IAMReadOnlyAccess'
+        - 'arn:aws:iam::aws:policy/CloudWatchLogsReadOnlyAccess'
+        - 'arn:aws:iam::aws:policy/AWSLambda_ReadOnlyAccess'
+        - 'arn:aws:iam::aws:policy/AWSCloudFormationReadOnlyAccess'
+        - 'arn:aws:iam::aws:policy/AWSAccountManagementReadOnlyAccess'
+        - 'arn:aws:iam::aws:policy/AmazonWorkSpacesWebReadOnly'
+        - 'arn:aws:iam::aws:policy/AmazonWorkSpacesThinClientReadOnlyAccess'
+      PermissionsBoundary: !Ref PermissionsBoundaryPolicy
+      Policies:
+        - PolicyName: 'DenyIfNoPermissionsBoundary'
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: 'DenyIfNoPermissionsBoundary'
+                Effect: Deny
+                Action: '*'
+                Resource: '*'
+                Condition:
+                  ArnNotEquals:
+                    'iam:PermissionsBoundary': !Ref PermissionsBoundaryPolicy
+        - PolicyName: 'AllowCloudShell'
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: 'AllowCloudShell'
+                Effect: Allow
+                Action: cloudshell:*
+                Resource: '*'
+                Condition:
+                  StringEqualsIfExists:
+                    cloudshell:environment-id: '${aws:RequestTag/cloud-shell-environment-id}'
+        - PolicyName: 'AllowExtraPermissions'
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: 'AllowExtraPermissions'
+                Effect: Allow
+                Action:
+                  - 'apigateway:Get*'
+                  - 'aps:ListWorkspaces'
+                  - 'eks:AccessKubernetesApi'
+                Resource: '*'
+
+  PermissionsBoundaryPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      Description: 'Permissions boundary policy to prevent privilege escalation'
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: 'AllowAllBeforeDeny'
+            Effect: Allow
+            Action: '*'
+            Resource: '*'
+          - Sid: 'PreventPrivilegeEscalation'
+            Effect: Deny
+            Action:
+              - 'iam:UpdateAssumeRolePolicy'
+              - 'iam:DeactivateMFADevice'
+              - 'iam:CreateServiceSpecificCredential'
+              - 'iam:DeleteAccessKey'
+              - 'iam:UpdateCloudFrontPublicKey'
+              - 'iam:DeleteGroup'
+              - 'iam:UpdateOpenIDConnectProviderThumbprint'
+              - 'iam:RemoveRoleFromInstanceProfile'
+              - 'iam:UpdateGroup'
+              - 'iam:CreateRole'
+              - 'iam:AttachRolePolicy'
+              - 'iam:SetSTSRegionalEndpointStatus'
+              - 'iam:PutRolePolicy'
+              - 'iam:AddRoleToInstanceProfile'
+              - 'iam:SetSecurityTokenServicePreferences'
+              - 'iam:CreateLoginProfile'
+              - 'iam:DetachRolePolicy'
+              - 'iam:CreateAccountAlias'
+              - 'iam:DeleteServerCertificate'
+              - 'iam:UploadSSHPublicKey'
+              - 'iam:DetachGroupPolicy'
+              - 'iam:DetachUserPolicy'
+              - 'iam:DeleteOpenIDConnectProvider'
+              - 'iam:DeleteCloudFrontPublicKey'
+              - 'iam:ChangePassword'
+              - 'iam:PutGroupPolicy'
+              - 'iam:UpdateLoginProfile'
+              - 'iam:UpdateServiceSpecificCredential'
+              - 'iam:CreateGroup'
+              - 'iam:RemoveClientIDFromOpenIDConnectProvider'
+              - 'iam:UpdateUser'
+              - 'iam:DeleteUserPolicy'
+              - 'iam:AttachUserPolicy'
+              - 'iam:DeleteRole'
+              - 'iam:UpdateRoleDescription'
+              - 'iam:UpdateAccessKey'
+              - 'iam:UpdateSSHPublicKey'
+              - 'iam:UploadCloudFrontPublicKey'
+              - 'iam:UpdateServerCertificate'
+              - 'iam:DeleteSigningCertificate'
+              - 'iam:UpdateAccountPasswordPolicy'
+              - 'iam:DeleteServiceLinkedRole'
+              - 'iam:CreateInstanceProfile'
+              - 'iam:PutRolePermissionsBoundary'
+              - 'iam:ResetServiceSpecificCredential'
+              - 'iam:DeletePolicy'
+              - 'iam:DeleteSSHPublicKey'
+              - 'iam:CreateVirtualMFADevice'
+              - 'iam:CreateSAMLProvider'
+              - 'iam:DeleteRolePermissionsBoundary'
+              - 'iam:CreateUser'
+              - 'iam:CreateAccessKey'
+              - 'iam:UpdateAccountName'
+              - 'iam:PassRole'
+              - 'iam:AddUserToGroup'
+              - 'iam:RemoveUserFromGroup'
+              - 'iam:DeleteRolePolicy'
+              - 'iam:EnableMFADevice'
+              - 'iam:ResyncMFADevice'
+              - 'iam:UpdateAccountEmailAddress'
+              - 'iam:DeleteAccountAlias'
+              - 'iam:CreatePolicyVersion'
+              - 'iam:UpdateSAMLProvider'
+              - 'iam:DeleteLoginProfile'
+              - 'iam:DeleteInstanceProfile'
+              - 'iam:UploadSigningCertificate'
+              - 'iam:DeleteAccountPasswordPolicy'
+              - 'iam:PutUserPermissionsBoundary'
+              - 'iam:DeleteUser'
+              - 'iam:DeleteUserPermissionsBoundary'
+              - 'iam:CreateOpenIDConnectProvider'
+              - 'iam:UploadServerCertificate'
+              - 'iam:CreatePolicy'
+              - 'iam:CreateServiceLinkedRole'
+              - 'iam:DeleteVirtualMFADevice'
+              - 'iam:AttachGroupPolicy'
+              - 'iam:PutUserPolicy'
+              - 'iam:UpdateRole'
+              - 'iam:UpdateSigningCertificate'
+              - 'iam:DeleteGroupPolicy'
+              - 'iam:AddClientIDToOpenIDConnectProvider'
+              - 'iam:DeleteServiceSpecificCredential'
+              - 'iam:DeletePolicyVersion'
+              - 'iam:SetDefaultPolicyVersion'
+              - 'iam:DeleteSAMLProvider'
+            Resource: '*'
