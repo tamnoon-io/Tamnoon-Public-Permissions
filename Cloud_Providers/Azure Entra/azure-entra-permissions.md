@@ -1,3 +1,5 @@
+azure-entra-permissions.md
+
 Tamnoon CloudPros require specific Microsoft Entra ID permissions to analyze identity and access management (IAM) misconfigurations and cloud infrastructure entitlement management (CIEM) issues affecting both human and non-human identities. 
 
 Microsoft Entra ID (formerly known as Azure Active Directory) permissions are granted using Microsoft Entra ID Directory Roles. Directory Roles grant access to Microsoft Entra ID resources such as Users, Groups, Service Principals (SPN)/App Registrations and Applications.
