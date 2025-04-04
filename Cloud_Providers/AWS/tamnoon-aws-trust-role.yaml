@@ -1,3 +1,8 @@
+Parameters:
+  TrustedPrincipalArn:
+    Type: String
+    Description: "The principal that Tamnoon authenticates to that will allow AssumeRole into each AWS account"
+
 Resources:
   TamnoonTrustRole:
     Type: AWS::IAM::Role
@@ -9,7 +14,7 @@ Resources:
           - Action: 'sts:AssumeRole'
             Effect: Allow
             Principal:
-              AWS: !Ref TamnoonServiceCloudAccountARN
+              AWS: !Ref TrustedPrincipalArn
       ManagedPolicyArns:
         - 'arn:aws:iam::aws:policy/SecurityAudit'
         - 'arn:aws:iam::aws:policy/job-function/ViewOnlyAccess'
@@ -20,19 +25,10 @@ Resources:
         - 'arn:aws:iam::aws:policy/AWSAccountManagementReadOnlyAccess'
         - 'arn:aws:iam::aws:policy/AmazonWorkSpacesWebReadOnly'
         - 'arn:aws:iam::aws:policy/AmazonWorkSpacesThinClientReadOnlyAccess'
+        - 'arn:aws:iam::aws:policy/IAMAccessAnalyzerReadOnlyAccess'
+        - 'arn:aws:iam::aws:policy/AWSCloudTrail_ReadOnlyAccess'
       PermissionsBoundary: !Ref PermissionsBoundaryPolicy
       Policies:
-        - PolicyName: 'DenyIfNoPermissionsBoundary'
-          PolicyDocument:
-            Version: '2012-10-17'
-            Statement:
-              - Sid: 'DenyIfNoPermissionsBoundary'
-                Effect: Deny
-                Action: '*'
-                Resource: '*'
-                Condition:
-                  ArnNotEquals:
-                    'iam:PermissionsBoundary': !Ref PermissionsBoundaryPolicy
         - PolicyName: 'AllowCloudShell'
           PolicyDocument:
             Version: '2012-10-17'
