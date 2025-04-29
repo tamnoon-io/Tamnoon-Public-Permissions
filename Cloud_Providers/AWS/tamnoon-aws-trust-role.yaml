@@ -22,7 +22,6 @@ Resources:
         - 'arn:aws:iam::aws:policy/CloudWatchLogsReadOnlyAccess'
         - 'arn:aws:iam::aws:policy/AWSLambda_ReadOnlyAccess'
         - 'arn:aws:iam::aws:policy/AWSCloudFormationReadOnlyAccess'
-        - 'arn:aws:iam::aws:policy/AWSAccountManagementReadOnlyAccess'
         - 'arn:aws:iam::aws:policy/AmazonWorkSpacesWebReadOnly'
         - 'arn:aws:iam::aws:policy/AmazonWorkSpacesThinClientReadOnlyAccess'
         - 'arn:aws:iam::aws:policy/IAMAccessAnalyzerReadOnlyAccess'
@@ -50,6 +49,8 @@ Resources:
                   - 'apigateway:Get*'
                   - 'aps:ListWorkspaces'
                   - 'eks:AccessKubernetesApi'
+                  - 'account:Get*'
+                  - 'account:List*'
                 Resource: '*'
 
   PermissionsBoundaryPolicy:
