@@ -10,7 +10,7 @@ The built-in **Reader**, **Reader & Data Access**, and **Log Analytics Reader** 
 
 ```jsonc
 {
-  "Name": "Custom-WebFunc-Storage-Reader-Sub",
+  "Name": "Tamnoon Custom Role",
   "IsCustom": true,
   "Description": "Tamnoon Custom Role Permissions (subscription scope).",
   "Actions": [
