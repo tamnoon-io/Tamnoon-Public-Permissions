@@ -28,7 +28,7 @@ The built-in **Reader**, **Reader & Data Access**, and **Log Analytics Reader** 
 ```
 ----
 
-# 2. Management-Group Scope Role
+# 2. Management-Group-Scoped Role
 ```jsonc
 {
   "Name": "Tamnoon Custom Role",
