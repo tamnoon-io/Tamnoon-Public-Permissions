@@ -1,4 +1,4 @@
-# Tamnoon CloudPros – Azure Custom Roles
+# Tamnoon CloudPros – Azure Built-in Roles
 
 The below Built-in Azure RBAC Roles are needed by Entra ID Users and/or Service Principal created for Tamnoon CloudPros, to access your Azure Subscription(s) through Azure Console, or programmatically.
 Associated permissions cover the majority of investigation playbooks, resource-listing operations, and log analysis via portal or API. 
