@@ -46,9 +46,9 @@ to evolve over time
 
 Actions Granted:
 
-  - Microsoft.Web/sites/functions/read
-  - Microsoft.Web/sites/config/list/action
-  - Microsoft.Storage/storageAccounts/listKeys/action
+  - `Microsoft.Web/sites/functions/read`
+  - `Microsoft.Web/sites/config/list/action`
+  - `Microsoft.Storage/storageAccounts/listKeys/action`
 
 Assignable Scopes:
   - /subscriptions/<subscription-id>
