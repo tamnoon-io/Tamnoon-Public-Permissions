@@ -12,7 +12,6 @@ without broad write or administrative access.
 --------------------------------------------------------------------------------
 # 1. Azure Built-in Roles
 --------------------------------------------------------------------------------
-https://github.com/tamnoon-io/Tamnoon-Public-Permissions/blob/main/Cloud_Providers/Azure/azure-builtin-roles.md 
 
 These are the standard Azure RBAC roles required by Tamnoon-managed users or 
 service principals for visibility and investigation workflows. They are usually 
