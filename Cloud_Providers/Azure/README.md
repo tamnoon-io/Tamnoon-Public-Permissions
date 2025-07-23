@@ -15,7 +15,7 @@ without broad write or administrative access.
 
 These are the standard Azure RBAC roles required by Tamnoon-managed users or 
 service principals for visibility and investigation workflows. They are usually 
-assigned at the subscription or resource group level.
+assigned at the management group or subscription level.
 
 # Required Roles:
 
@@ -49,6 +49,7 @@ Actions Granted:
 
 Assignable Scopes:
   - /subscriptions/<subscription-id>
+  OR
   - /providers/Microsoft.Management/managementGroups/<mg-id>
 
 This role should be maintained to reflect evolving API capabilities and Tamnoon 
@@ -63,12 +64,12 @@ principals, app registrations), Tamnoon requires access to Microsoft Entra ID
 resources.
 
 Minimum Required Role:
-  - Directory Readers
+  - **Directory Readers**
     Grants read access to users, groups, and applications.
     Docs: https://learn.microsoft.com/en-us/entra/identity/role-based-access-control/permissions-reference#directory-readers
 
 Preferred Role:
-  - Global Reader
+  - **Global Reader**
     Grants full read-only access to all directory objects including policies.
     Docs: https://learn.microsoft.com/en-us/entra/identity/role-based-access-control/permissions-reference#global-reader
 
@@ -104,7 +105,7 @@ Benefits:
 --------------------------------------------------------------------------------
 
 - Assign roles using Azure Portal, Azure CLI, PowerShell, or ARM templates.
-- Scope roles to the narrowest applicable level (e.g. resource group).
+- Scope roles to the narrowest applicable level.
 - Maintain audit trails using Azure Activity Logs.
 - Keep custom role definitions up to date.
 
