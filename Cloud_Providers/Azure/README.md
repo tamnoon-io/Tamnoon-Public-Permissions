@@ -110,7 +110,7 @@ Benefits:
 - Keep custom role definitions up to date.
 
 --------------------------------------------------------------------------------
-7. Support and Contact
+# 7. Support and Contact
 --------------------------------------------------------------------------------
 
 For help configuring access or assigning roles, please contact your Tamnoon 
