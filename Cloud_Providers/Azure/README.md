@@ -1,6 +1,5 @@
 ============================================================
     Tamnoon CloudPros – Azure Permissions Overview
-============================================================
 
 This document outlines the Azure permissions required for Tamnoon CloudPros to
 investigate, monitor, and remediate cloud misconfigurations within customer
