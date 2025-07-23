@@ -21,15 +21,18 @@ assigned at the management group or subscription level.
 
   - **Reader**
     Description: Read-only access to all resource types.
+
     Docs: https://learn.microsoft.com/en-us/azure/role-based-access-control/built-in-roles/general#reader
 
   - **Reader and Data Access**
     Description: Same as Reader, but includes read access to storage data (blobs, files).
+
     Docs: https://learn.microsoft.com/en-us/azure/role-based-access-control/built-in-roles/storage#reader-and-data-access
 
   - **Log Analytics Reader**
     Description: Read-only access to Azure Monitor Logs and Log Analytics Workspaces.
     Use Case: For audit log access, NSG flow log review, diagnostics.
+
     Docs: https://learn.microsoft.com/en-us/azure/azure-monitor/logs/manage-access?tabs=portal#log-analytics-reader
 
 --------------------------------------------------------------------------------
@@ -49,7 +52,9 @@ Actions Granted:
 
 Assignable Scopes:
   - /subscriptions/<subscription-id>
+
   OR
+
   - /providers/Microsoft.Management/managementGroups/<mg-id>
 
 This role should be maintained to reflect evolving API capabilities and Tamnoon 
@@ -63,12 +68,14 @@ To investigate identity-related misconfigurations (users, groups, service
 principals, app registrations), Tamnoon requires access to Microsoft Entra ID 
 resources.
 
-Minimum Required Role:
+**Minimum Required Role:**
+
   - **Directory Readers**
     Grants read access to users, groups, and applications.
     Docs: https://learn.microsoft.com/en-us/entra/identity/role-based-access-control/permissions-reference#directory-readers
 
-Preferred Role:
+**Preferred Role:**
+
   - **Global Reader**
     Grants full read-only access to all directory objects including policies.
     Docs: https://learn.microsoft.com/en-us/entra/identity/role-based-access-control/permissions-reference#global-reader
@@ -81,8 +88,8 @@ If your environment has Microsoft Entra Permissions Management enabled, Tamnoon
 can leverage it for CIEM (Cloud Infrastructure Entitlement Management) to detect 
 unused or excessive permissions.
 
-Required Permission:
-  - microsoft.permissionsManagement/allEntities/allProperties/read
+**Required Permission:**
+  - `microsoft.permissionsManagement/allEntities/allProperties/read`
 
 Benefits:
   - Detect and reduce excessive permissions
@@ -117,4 +124,4 @@ For help configuring access or assigning roles, please contact your Tamnoon
 CloudPros integration engineer. 
 
 Maintained by: https://tamnoon.io  
-Last Updated: July 2025
+Last Updated: July 23rd, 2025
