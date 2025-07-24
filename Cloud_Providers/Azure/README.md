@@ -51,11 +51,11 @@ Actions Granted:
   - `Microsoft.Storage/storageAccounts/listKeys/action`
 
 Assignable Scopes:
-  - /subscriptions/<subscription-id>
+  - /subscriptions/<your-subscription-id>
 
   OR
 
-  - /providers/Microsoft.Management/managementGroups/<mg-id>
+  - /providers/Microsoft.Management/managementGroups/<your-mgmt-id>
 
 This role should be maintained to reflect evolving API capabilities and Tamnoon 
 service expansion.
@@ -72,12 +72,14 @@ resources.
 
   - **Directory Readers**
     Grants read access to users, groups, and applications.
+
     Docs: https://learn.microsoft.com/en-us/entra/identity/role-based-access-control/permissions-reference#directory-readers
 
 **Preferred Role:**
 
   - **Global Reader**
     Grants full read-only access to all directory objects including policies.
+
     Docs: https://learn.microsoft.com/en-us/entra/identity/role-based-access-control/permissions-reference#global-reader
 
 --------------------------------------------------------------------------------
