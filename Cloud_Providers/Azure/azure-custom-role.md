@@ -16,7 +16,10 @@ The built-in **Reader**, **Reader & Data Access**, and **Log Analytics Reader** 
   "Actions": [
     "Microsoft.Web/sites/functions/read",
     "Microsoft.Web/sites/config/list/action",
+    "Microsoft.Web/sites/host/listKeys/action",
+    "Microsoft.Web/sites/functions/listKeys/action",
     "Microsoft.Storage/storageAccounts/listKeys/action"
+
   ],
   "NotActions": [],
   "DataActions": [],
