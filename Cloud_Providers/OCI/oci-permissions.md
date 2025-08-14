@@ -1,4 +1,5 @@
 Allow group TamnoonAuditors to read all-resources in tenancy
+
 Allow group TamnoonAuditors to read compartments in tenancy
 Allow group TamnoonAuditors to read objectstorage-namespaces in tenancy
 Allow group TamnoonAuditors to read buckets in tenancy
