@@ -43,8 +43,14 @@ The built-in **Reader**, **Reader & Data Access**, and **Log Analytics Reader** 
   "Description": "Tamnoon Custom Role Permissions (management-group scope).",
   "Actions": [
     "Microsoft.Web/sites/functions/read",
+    "Microsoft.Web/sites/config/read",
     "Microsoft.Web/sites/config/list/action",
-    "Microsoft.Storage/storageAccounts/listKeys/action"
+    "Microsoft.Web/sites/host/listKeys/action",
+    "Microsoft.Web/sites/functions/listKeys/action",
+    "Microsoft.Storage/storageAccounts/listKeys/action",
+    "Microsoft.KeyVault/vaults/keys/read",
+    "Microsoft.KeyVault/vaults/secrets/readMetadata/action",
+    "Microsoft.KeyVault/vaults/certificates/read"
   ],
   "NotActions": [],
   "DataActions": [],
