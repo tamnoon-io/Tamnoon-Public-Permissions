@@ -15,6 +15,7 @@ The built-in **Reader**, **Reader & Data Access**, and **Log Analytics Reader** 
   "Description": "Tamnoon Custom Role Permissions (subscription scope).",
   "Actions": [
     "Microsoft.Web/sites/functions/read",
+    "Microsoft.Web/sites/config/read",
     "Microsoft.Web/sites/config/list/action",
     "Microsoft.Web/sites/host/listKeys/action",
     "Microsoft.Web/sites/functions/listKeys/action",
