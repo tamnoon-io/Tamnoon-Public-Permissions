@@ -23,6 +23,8 @@ The built-in **Reader**, **Reader & Data Access**, and **Log Analytics Reader** 
     "Microsoft.KeyVault/vaults/keys/read",
     "Microsoft.KeyVault/vaults/secrets/readMetadata/action",
     "Microsoft.KeyVault/vaults/certificates/read"
+    "Microsoft.Insights/logs/read",
+    "Microsoft.Insights/DiagnosticSettings/read"
 
   ],
   "NotActions": [],
@@ -51,6 +53,8 @@ The built-in **Reader**, **Reader & Data Access**, and **Log Analytics Reader** 
     "Microsoft.KeyVault/vaults/keys/read",
     "Microsoft.KeyVault/vaults/secrets/readMetadata/action",
     "Microsoft.KeyVault/vaults/certificates/read"
+    "Microsoft.Insights/logs/read",
+    "Microsoft.Insights/DiagnosticSettings/read"
   ],
   "NotActions": [],
   "DataActions": [],
