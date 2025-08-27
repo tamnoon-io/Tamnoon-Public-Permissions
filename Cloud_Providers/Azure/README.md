@@ -55,6 +55,8 @@ Actions Granted:
   - `Microsoft.KeyVault/vaults/keys/read`
   - `Microsoft.KeyVault/vaults/secrets/readMetadata/action`
   - `Microsoft.KeyVault/vaults/certificates/read`
+  - `Microsoft.Insights/logs/read`
+  - `Microsoft.Insights/DiagnosticSettings/read`
 
 Assignable Scopes:
   - /subscriptions/<your-subscription-id>
