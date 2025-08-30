@@ -46,13 +46,12 @@ to evolve over time
 
 Actions Granted:
 
-  - `Microsoft.Web/sites/functions/read`
+  - `Microsoft.Web/sites/functions/read` 
   - `Microsoft.Web/sites/config/read`
   - `Microsoft.KeyVault/vaults/keys/read`
+  - `Microsoft.KeyVault/vaults/secrets/read`
   - `Microsoft.KeyVault/vaults/certificates/read`
-  - `Microsoft.Insights/logs/read`
-  - `Microsoft.Insights/DiagnosticSettings/read`
-
+  
 Assignable Scopes:
   - /subscriptions/<your-subscription-id>
 
@@ -62,6 +61,11 @@ Assignable Scopes:
 
 This role should be maintained to reflect evolving API capabilities and Tamnoon 
 service expansion.
+
+Explanation: (not covered by Reader)
+Microsoft.Web/sites/functions/read - Function configurations. 
+Microsoft.Web/sites/config/read - Function env vars with API keys/SAS tokens (in cleartext) alerts. 
+Microsoft.KeyVault/vaults/secrets/read - Secret metadata (not data values)
 
 --------------------------------------------------------------------------------
 # 3. Microsoft Entra ID (Directory Roles)

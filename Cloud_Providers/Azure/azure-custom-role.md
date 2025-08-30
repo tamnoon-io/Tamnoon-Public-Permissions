@@ -17,10 +17,8 @@ The built-in **Reader**, **Reader & Data Access**, and **Log Analytics Reader** 
     "Microsoft.Web/sites/functions/read",
     "Microsoft.Web/sites/config/read",
     "Microsoft.KeyVault/vaults/keys/read",
-    "Microsoft.KeyVault/vaults/secrets/readMetadata/action",
+    "Microsoft.KeyVault/vaults/secrets/read",
     "Microsoft.KeyVault/vaults/certificates/read"
-    "Microsoft.Insights/logs/read",
-    "Microsoft.Insights/DiagnosticSettings/read"
   ],
   "NotActions": [],
   "DataActions": [],
@@ -41,15 +39,9 @@ The built-in **Reader**, **Reader & Data Access**, and **Log Analytics Reader** 
   "Actions": [
     "Microsoft.Web/sites/functions/read",
     "Microsoft.Web/sites/config/read",
-    "Microsoft.Web/sites/config/list/action",
-    "Microsoft.Web/sites/host/listKeys/action",
-    "Microsoft.Web/sites/functions/listKeys/action",
-    "Microsoft.Storage/storageAccounts/listKeys/action",
     "Microsoft.KeyVault/vaults/keys/read",
-    "Microsoft.KeyVault/vaults/secrets/readMetadata/action",
+    "Microsoft.KeyVault/vaults/secrets/read",
     "Microsoft.KeyVault/vaults/certificates/read"
-    "Microsoft.Insights/logs/read",
-    "Microsoft.Insights/DiagnosticSettings/read"
   ],
   "NotActions": [],
   "DataActions": [],
