@@ -19,6 +19,7 @@ To address these gaps, we've defined a tailored Azure Custom Role that grants ex
   "IsCustom": true,
   "Description": "Tamnoon Custom Role Permissions (subscription scope).",
   "Actions": [
+    "Microsoft.Web/sites/functions/config/listkeys/action",
     "Microsoft.Storage/storageAccounts/listKeys/action",
     "Microsoft.OperationalInsights/workspaces/analytics/query/action",
     "Microsoft.OperationalInsights/workspaces/search/action"
@@ -40,6 +41,7 @@ To address these gaps, we've defined a tailored Azure Custom Role that grants ex
   "IsCustom": true,
   "Description": "Tamnoon Custom Role Permissions (management-group scope).",
   "Actions": [
+    "Microsoft.Web/sites/functions/config/listkeys/action",
     "Microsoft.Storage/storageAccounts/listKeys/action",
     "Microsoft.OperationalInsights/workspaces/analytics/query/action",
     "Microsoft.OperationalInsights/workspaces/search/action"
@@ -55,6 +57,12 @@ To address these gaps, we've defined a tailored Azure Custom Role that grants ex
 
 
 **Permissions Specifications**
+`Microsoft.Web/sites/functions/config/listkeys/action`
+Required for investigating Function App Function Environment Variables, especially for CNAPP alerts such as: 
+- Publicly exposed resource with cleartext storage account keys/SAS tokens allowing high privileges to a storage account
+- Internal resource with cleartext storage account keys/SAS tokens that grant high privileges to a storage account
+- Publicly exposed resource with cleartext SaaS API keys
+
 `Microsoft.Storage/storageAccounts/listKeys/action`
 Required for: Storage account security analysis scripts (comprehensive container, file share, queue, and table analysis). Retrieving of storage account access keys for data plane operations to determine actual content, public access levels, and security configurations
 

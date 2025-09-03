@@ -46,6 +46,7 @@ to evolve over time
 
 Actions Granted:
 
+- `Microsoft.Web/sites/functions/config/listkeys/action`
 - `Microsoft.Storage/storageAccounts/listKeys/action`
 - `Microsoft.OperationalInsights/workspaces/analytics/query/action`
 - `Microsoft.OperationalInsights/workspaces/search/action`
