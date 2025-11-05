@@ -3,7 +3,7 @@
 This document provides an overview of Google Cloud Platform (GCP) roles needed by GCP Users and/or Service Accounts created for Tamnoon CloudPros, to access your GCP Projects through GCP console, or programmatically. Associated permissions cover the majority of investigation playbooks, resource-listing operations, and log analysis via portal or API. 
 
 --------------------------------
-## Organization-Level Onboarding
+## 1. Organization-Level Onboarding
 --------------------------------
 Permission requirement from this section applies if/when GCP organization wide onboarding is in scope. 
 Sections 2. and 3. not applicable because of permissions inheritance. 
@@ -35,7 +35,7 @@ Should Private Logs Viewer role not be assigned to Tamnoon CloudPros, Tamnoon re
 
 
 -----------------------------
-## Folder-Level Onboarding
+## 2. Folder-Level Onboarding
 -----------------------------
 This only applies when customer decides not to onboard their entire GCP Organization. 
 All GCP projects within the various folders in scope will be covered. 
@@ -67,7 +67,7 @@ Should Private Logs Viewer role not be assigned to Tamnoon CloudPros, Tamnoon re
 
 
 ---------------------------------
-3. ## Project-Level Onboarding
+## 3. Project-Level Onboarding
 ---------------------------------
 ### Viewer
 `roles/viewer`
