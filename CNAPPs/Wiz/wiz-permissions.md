@@ -1,47 +1,69 @@
-# Tamnoon Cloud Experts - Wiz Permissions
+# Tamnoon Cloud Experts — Wiz Role Requirements
 
-Wiz uses different constructs to piece together effective permissions. The content on this page was developed by examining the Wiz console and using the [Role-based Access Control (RBAC) page of Wiz Docs](https://docs.wiz.io/wiz-docs/docs/role-based-access-control?lng=en#role-permissions).
+Tamnoon integrates with **Wiz** to deliver enhanced cloud visibility, configuration analytics, and security posture assessment.  
+Wiz uses a flexible Role-Based Access Control (RBAC) model with multiple constructs to define effective permissions.  
+The information in this guide is derived from both the **Wiz console** and the [Role-Based Access Control (RBAC) documentation](https://docs.wiz.io/wiz-docs/docs/role-based-access-control?lng=en#role-permissions).
 
-# Wiz Tamnoon Customer Scoping Questions
+---
 
-When scoping permissions for a customer using Wiz as their CNAPP, we must gather three datapoints represented in the two questions below.
+## Overview
 
-<aside>
-🔥
+To enable Tamnoon’s cloud analysis capabilities within Wiz, specific **roles and scopes** must be assigned depending on the type of Tamnoon subscription and how the customer organizes projects and authentication.
 
-“Horizontally” scoped projects that apply tags across two or more cloud subscriptions and use tags to define Wiz Projects have some sharp edges. Wiz recommends against “horizontally” scoped projects.
+Tamnoon CloudPro requires only the permissions necessary for read and response operations within Wiz — never full administrative access.  
+Assignments are made according to **Tamnoon service tier** and **project scope**.
 
-</aside>
+---
 
-1. **How will Tamnoon TSE authenticate to Wiz?**
-    1. **IDP**: The customer provisions a user for each member of their TSE team per their own procedures.
-    2. **Wiz**: Tamnoon provides automation that creates the users using the Wiz API.
-2. **What Tamnoon subscription (Assisted or Managed) and Wiz scope (Global or Project) will be used?**
-    1. **Assisted, Global**: Global Contributor role
-    2. **Managed, Global**: Global Responder role
-    3. **Assisted, Project**: Project Member role
-    4. **Managed, Project**: Project Admin role
+## Required Roles for Tamnoon CloudPro Users
 
-<aside>
-⚠️
+When setting up permissions for Tamnoon in Wiz, gather the following information to determine the correct role assignments.
 
-Project Scopes must assign the appropriate role for each project/folder.
+### 1. Authentication Method
 
-</aside>
+| Authentication Type | Description |
+|----------------------|-------------|
+| **Identity Provider (IDP)** | The customer provisions a user for each Tamnoon TSE per their own identity management process (e.g., Okta, Azure AD). |
+| **Wiz Authentication** | Tamnoon automation creates users through the Wiz API for managed onboarding. |
 
-# Terms
+### 2. Role Assignments by Subscription and Scope
 
-**User**: A user represents a human being with access to Wiz. User authentication occurs either by Wiz or a configured 3rd party identity provider (e.g. Okta). Wiz users are invited from the Wiz console by navigating to Settings - User Management and selecting the Invite User button.
+| Tamnoon Subscription | Wiz Scope | Required Wiz Role |
+|-----------------------|-----------|-------------------|
+| **Assisted** | **Global** | Global Contributor |
+| **Managed** | **Global** | Global Responder |
+| **Assisted** | **Project** | Project Member |
+| **Managed** | **Project** | Project Admin |
 
-**Service Accounts**: Service accounts are used by machine-to-machine interfaces to authenticate with the Wiz API. There are two types of service accounts: Custom Integration (GraphQL API) and Component-specific. 
+> **Note:** When using Project scopes, ensure that the appropriate role is assigned for **each project or folder** within the Wiz environment.
 
-**Custom Integration (GraphQL API)** - Customizable permission scopes for use by third-party integrations and custom scripts.
-**Component-specific** - Defined by Wiz for use by components such as Wiz Sensor and Kubernetes Admission Controller, so their permissions cannot be edited.
+> **Caution:** Wiz recommends avoiding “horizontally” scoped projects that use tags across multiple cloud subscriptions to define projects, as this can cause permission and mapping inconsistencies.
 
-**User Role**: A user role is the mapping between a user the assigned Scopes.
+---
 
-**Scopes**: Scopes are authorizations to perform specific actions in Wiz. Scopes may be “catch-all” scopes that include all permissions underneath them. For example, `read:all` also grants the `read:detections` scope. Scopes may be project-scoped or global.
+## Key Terms
 
-**Project**: Subdivisions of a cloud estate, usually identified by cloud subscriptions (e.g. AWS account, GCP Project, Azure subscription).
+| Term | Definition |
+|------|-------------|
+| **User** | Represents a human account within Wiz. Authentication occurs through Wiz or a configured identity provider (e.g., Okta). Users are invited via the Wiz console under **Settings → User Management → Invite User**. |
+| **Service Account** | Used for machine-to-machine authentication with the Wiz API. There are two types: **Custom Integration (GraphQL API)** and **Component-specific**. |
+| **Custom Integration (GraphQL API)** | Allows customizable permission scopes for integrations and automation scripts. |
+| **Component-specific** | Defined by Wiz for built-in components (e.g., Wiz Sensor, Kubernetes Admission Controller). Permissions for these accounts cannot be modified. |
+| **User Role** | The mapping between a user and the set of assigned scopes. |
+| **Scope** | Defines the actions a user or service account can perform. Scopes may be project-scoped or global, and some aggregate others (e.g., `read:all` includes `read:detections`). |
+| **Project** | Represents a subdivision of your cloud estate, typically aligned with an AWS account, GCP project, or Azure subscription. |
+| **Folder** | A collection of multiple projects within Wiz, often used for organizing related cloud environments. |
 
-**Folder**: Collection of Projects.
+---
+
+## Access Philosophy
+
+Tamnoon follows the **principle of least privilege**, requesting only the roles and scopes necessary to collect configuration, detection, and security posture data.  
+Access is scoped appropriately to the **Tamnoon service tier** and **customer Wiz project hierarchy**.
+
+---
+
+## References
+
+- [Wiz Role-Based Access Control (RBAC)](https://docs.wiz.io/wiz-docs/docs/role-based-access-control?lng=en#role-permissions)
+- [Wiz User and Service Account Management](https://docs.wiz.io/wiz-docs/docs/user-management)
