@@ -56,9 +56,18 @@ Actions Granted:
 - `Microsoft.Storage/storageAccounts/listKeys/action`
 - `Microsoft.Storage/storageAccounts/listServiceSas/action`
 
-**App Service / Functions**
-- `Microsoft.Web/sites/functions/config/listkeys/action`
+**App Service (Connection Strings & App Settings)**
 - `Microsoft.Web/sites/config/list/action`
+
+**Azure Functions (Function & Host Keys)**
+- `Microsoft.Web/sites/functions/listkeys/action`
+- `Microsoft.Web/sites/host/listkeys/action`
+
+**Key Vault (Data Plane - Secret/Key/Certificate Access)**
+- `Microsoft.KeyVault/vaults/secrets/getSecret/action`
+- `Microsoft.KeyVault/vaults/secrets/readMetadata/action`
+- `Microsoft.KeyVault/vaults/keys/read`
+- `Microsoft.KeyVault/vaults/certificates/read`
 
 **Container Registry (Admin Credential Audit)**
 - `Microsoft.ContainerRegistry/registries/listCredentials/action`
