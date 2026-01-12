@@ -24,10 +24,12 @@ assigned at the management group or subscription level.
 
     Docs: https://learn.microsoft.com/en-us/azure/role-based-access-control/built-in-roles/general#reader
 
-  - **Reader and Data Access**
-    Description: Same as Reader, but includes read access to storage data (blobs, files).
+  - **Storage Blob Data Reader**
+    Description: Read-only access to blob data. Sufficient for reading diagnostic logs
+    stored in blob containers (e.g., `insights-logs-auditevent`). Does NOT grant
+    storage key access (least-privilege approach).
 
-    Docs: https://learn.microsoft.com/en-us/azure/role-based-access-control/built-in-roles/storage#reader-and-data-access
+    Docs: https://learn.microsoft.com/en-us/azure/role-based-access-control/built-in-roles/storage#storage-blob-data-reader
 
   - **Log Analytics Reader**
     Description: Read-only access to Azure Monitor Logs and Log Analytics Workspaces.
@@ -104,12 +106,12 @@ Benefits:
 # 5. Summary Matrix
 --------------------------------------------------------------------------------
 
-| Component                       | Required Roles / Permissions                          |
-|--------------------------------|--------------------------------------------------------|
-| Azure Resource Visibility      | Reader, Reader and Data Access, Log Analytics Reader  |
-| Targeted Investigation         | Tamnoon Custom Role                                   |
-| Identity & IAM Insights        | Global Reader (preferred) or Directory Readers        |
-| CIEM (Optional)                | Global Reader or custom role for Permissions Mgmt     |
+| Component                       | Required Roles / Permissions                              |
+|--------------------------------|-----------------------------------------------------------|
+| Azure Resource Visibility      | Reader, Storage Blob Data Reader, Log Analytics Reader    |
+| Targeted Investigation         | Tamnoon Custom Role                                       |
+| Identity & IAM Insights        | Global Reader (preferred) or Directory Readers            |
+| CIEM (Optional)                | Global Reader or custom role for Permissions Mgmt         |
 
 --------------------------------------------------------------------------------
 # 6. Implementation Notes
