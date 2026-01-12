@@ -120,7 +120,51 @@ Benefits:
   - Strengthen Zero Trust posture
 
 --------------------------------------------------------------------------------
-# 5. Summary Matrix
+# 5. Onboarding Deployment Permissions
+--------------------------------------------------------------------------------
+
+The following permissions are required by the identity (user or service principal)
+that deploys the Tamnoon onboarding template via Azure CLI or Portal.
+
+## Microsoft Entra ID (Minimum)
+
+  - **Cloud Application Administrator** (Directory Role)
+    Required to:
+    - Create App Registration (`TamnoonFederationApp`)
+    - Create Service Principal (Enterprise Application)
+    - Configure Federated Identity Credential (AWS Cognito OIDC trust)
+
+    Docs: https://learn.microsoft.com/en-us/entra/identity/role-based-access-control/permissions-reference#cloud-application-administrator
+
+## Azure RBAC (Minimum)
+
+  - **User Access Administrator** at the deployment scope
+    Required to assign roles (Reader, Log Analytics Reader, Storage Blob Data Reader)
+    to the Tamnoon Service Principal.
+
+    | Template Scope     | User Access Administrator Scope        |
+    |--------------------|----------------------------------------|
+    | Tenant-level       | Root Management Group                  |
+    | Management Group   | Target Management Group                |
+    | Subscription       | Target Subscription                    |
+
+    Docs: https://learn.microsoft.com/en-us/azure/role-based-access-control/built-in-roles#user-access-administrator
+
+## Conditional Access Considerations
+
+If your organization has Conditional Access policies that block Azure CLI
+(error code `53003`: "Access has been blocked by Conditional Access policies"),
+use one of these alternatives:
+
+| Alternative              | Description                                              |
+|--------------------------|----------------------------------------------------------|
+| **Azure Cloud Shell**    | Usually exempted from CA policies (trusted Azure network)|
+| **Azure Portal**         | Upload template via Portal → "Deploy a custom template"  |
+| **Compliant Device**     | Run Azure CLI from an Intune-enrolled device             |
+| **CA Policy Exception**  | Temporarily exclude the deploying identity or location   |
+
+--------------------------------------------------------------------------------
+# 6. Summary Matrix
 --------------------------------------------------------------------------------
 
 | Component                       | Required Roles / Permissions                              |
@@ -129,9 +173,10 @@ Benefits:
 | Targeted Investigation         | Tamnoon Custom Role                                       |
 | Identity & IAM Insights        | Global Reader (preferred) or Directory Readers            |
 | CIEM (Optional)                | Global Reader or custom role for Permissions Mgmt         |
+| Onboarding Deployment          | Cloud Application Administrator + User Access Administrator |
 
 --------------------------------------------------------------------------------
-# 6. Implementation Notes
+# 7. Implementation Notes
 --------------------------------------------------------------------------------
 
 - Assign roles using Azure Portal, Azure CLI, PowerShell, or ARM templates.
@@ -140,11 +185,11 @@ Benefits:
 - Keep custom role definitions up to date.
 
 --------------------------------------------------------------------------------
-# 7. Support and Contact
+# 8. Support and Contact
 --------------------------------------------------------------------------------
 
-For help configuring access or assigning roles, please contact your Tamnoon 
-CloudPros integration engineer. 
+For help configuring access or assigning roles, please contact your Tamnoon
+CloudPros integration engineer.
 
-Maintained by: https://tamnoon.io  
-Last Updated: July 23rd, 2025
+Maintained by: https://tamnoon.io
+Last Updated: January 12th, 2026
