@@ -47,22 +47,28 @@ Assign these roles at the Management Group or Subscription level.
 ## 2. Microsoft Entra ID Directory Roles (Required)
 --------------------------------------------------------------------------------
 
-Required for investigating identity-related misconfigurations (users, groups,
-service principals, app registrations).
+Required for resolving principal UUIDs/GUIDs to human-readable names when
+analyzing data plane logs and identifying callers against Azure resources
+(e.g., Access Patterns analysis for Storage, Key Vault, SQL Server).
 
-**Minimum Required:**
+**Option A: Directory Role**
 
-  - **Directory Readers**
-    Grants read access to users, groups, and applications.
+  - **Directory Readers** (Minimum)
+    Grants read access to users, groups, service principals, and applications.
 
     Docs: https://learn.microsoft.com/en-us/entra/identity/role-based-access-control/permissions-reference#directory-readers
 
-**Preferred:**
-
-  - **Global Reader**
+  - **Global Reader** (Preferred)
     Grants full read-only access to all directory objects including policies.
 
     Docs: https://learn.microsoft.com/en-us/entra/identity/role-based-access-control/permissions-reference#global-reader
+
+**Option B: MS Graph API Permission**
+
+  - `Directory.Read.All` (Application permission)
+    Equivalent to Directory Readers for programmatic access.
+
+    Docs: https://learn.microsoft.com/en-us/graph/permissions-reference#directoryreadall
 
 --------------------------------------------------------------------------------
 ## 3. Custom Role (Add-on for Deeper Investigation)
@@ -223,7 +229,7 @@ After template deployment, you can optionally:
 | Reader | Assign to User | Auto-assigned by Template |
 | Storage Blob Data Reader | Assign to User | Auto-assigned by Template |
 | Log Analytics Reader | Assign to User | Auto-assigned by Template |
-| Directory Readers / Global Reader | Assign to User | Assign to Service Principal |
+| Directory Readers (or `Directory.Read.All`) | Assign to User | Assign to Service Principal (or grant Graph API permission) |
 | Custom Role (Add-on) | Assign to User | Assign to Service Principal |
 | Entra Permissions Mgmt (Optional) | Assign to User | Assign to Service Principal |
 
