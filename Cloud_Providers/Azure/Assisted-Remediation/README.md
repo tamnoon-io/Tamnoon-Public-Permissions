@@ -41,17 +41,34 @@ assigned at the management group or subscription level.
 # 2. Tamnoon Azure Custom Role
 --------------------------------------------------------------------------------
 
-Some workflows require more granular permissions than those available in 
-built-in roles. Tamnoon defines a custom role with only the actions necessary 
-for deeper investigation and secure remediation tasks.Custom Role is designed 
-to evolve over time
+Some workflows require more granular permissions than those available in
+built-in roles. Tamnoon defines a custom role with only the actions necessary
+for deeper investigation and secure remediation tasks. Custom Role is designed
+to evolve over time.
 
 Actions Granted:
 
-- `Microsoft.Web/sites/functions/config/listkeys/action`
-- `Microsoft.Storage/storageAccounts/listKeys/action`
+**Log Analytics (Query & Search)**
 - `Microsoft.OperationalInsights/workspaces/analytics/query/action`
 - `Microsoft.OperationalInsights/workspaces/search/action`
+
+**Storage Account (Key Access for Diagnostic Logs)**
+- `Microsoft.Storage/storageAccounts/listKeys/action`
+- `Microsoft.Storage/storageAccounts/listServiceSas/action`
+
+**App Service / Functions**
+- `Microsoft.Web/sites/functions/config/listkeys/action`
+- `Microsoft.Web/sites/config/list/action`
+
+**Container Registry (Admin Credential Audit)**
+- `Microsoft.ContainerRegistry/registries/listCredentials/action`
+
+**Event Hub (Connection String Access for Log Streaming)**
+- `Microsoft.EventHub/namespaces/authorizationRules/listKeys/action`
+
+**Cosmos DB (Key & Connection String Access)**
+- `Microsoft.DocumentDB/databaseAccounts/listKeys/action`
+- `Microsoft.DocumentDB/databaseAccounts/listConnectionStrings/action`
 
 Assignable Scopes:
   - /subscriptions/<your-subscription-id>
@@ -60,7 +77,7 @@ Assignable Scopes:
 
   - /providers/Microsoft.Management/managementGroups/<your-mgmt-id>
 
-This role should be maintained to reflect evolving API capabilities and Tamnoon 
+This role should be maintained to reflect evolving API capabilities and Tamnoon
 service expansion.
 
 
