@@ -106,21 +106,6 @@ for both onboarding methods.
 
 This role should be maintained to reflect evolving API capabilities.
 
---------------------------------------------------------------------------------
-## 4. Entra Permissions Management (Optional)
---------------------------------------------------------------------------------
-
-If your environment has Microsoft Entra Permissions Management enabled, Tamnoon
-can leverage it for CIEM (Cloud Infrastructure Entitlement Management).
-
-**Required Permission:**
-- `microsoft.permissionsManagement/allEntities/allProperties/read`
-
-**Benefits:**
-- Detect and reduce excessive permissions
-- Auto-remediate least privilege violations
-- Strengthen Zero Trust posture
-
 ================================================================================
 # PART B: ONBOARDING METHODS
 ================================================================================
@@ -140,7 +125,6 @@ using their Entra ID user account.
 3. Assign the Entra ID Directory Role from Section 2 (Directory Readers or
    Global Reader)
 4. (Optional) Assign the Custom Role from Section 3 for deeper investigation
-5. (Optional) Grant Entra Permissions Management access from Section 4
 
 **No ARM template deployment required** - roles are assigned directly to the user.
 
@@ -207,11 +191,10 @@ use one of these alternatives:
 | **Compliant Device** | Run Azure CLI from an Intune-enrolled device |
 | **CA Policy Exception** | Temporarily exclude the deploying identity or location |
 
-### Post-Deployment (Optional Add-ons)
+### Post-Deployment (Optional Add-on)
 
-After template deployment, you can optionally:
-1. Assign the Custom Role (Section 3) to the `TamnoonFederationApp` Service Principal
-2. Grant Entra Permissions Management access (Section 4)
+After template deployment, you can optionally assign the Custom Role (Section 3)
+to the `TamnoonFederationApp` Service Principal for deeper investigation capabilities.
 
 ================================================================================
 # SUMMARY
@@ -228,7 +211,6 @@ After template deployment, you can optionally:
 | Log Analytics Reader | Assign to User | Auto-assigned by Template |
 | Directory Readers | Assign to User | Assign to Service Principal |
 | Custom Role (Add-on) | Assign to User | Assign to Service Principal |
-| Entra Permissions Mgmt (Optional) | Assign to User | Assign to Service Principal |
 
 --------------------------------------------------------------------------------
 ## Deployer Permissions (Platform Onboarding Only)
