@@ -51,8 +51,6 @@ Required for resolving principal UUIDs/GUIDs to human-readable names when
 analyzing data plane logs and identifying callers against Azure resources
 (e.g., Access Patterns analysis for Storage, Key Vault, SQL Server).
 
-**Option A: Directory Role**
-
   - **Directory Readers** (Minimum)
     Grants read access to users, groups, service principals, and applications.
 
@@ -62,13 +60,6 @@ analyzing data plane logs and identifying callers against Azure resources
     Grants full read-only access to all directory objects including policies.
 
     Docs: https://learn.microsoft.com/en-us/entra/identity/role-based-access-control/permissions-reference#global-reader
-
-**Option B: MS Graph API Permission**
-
-  - `Directory.Read.All` (Application permission)
-    Equivalent to Directory Readers for programmatic access.
-
-    Docs: https://learn.microsoft.com/en-us/graph/permissions-reference#directoryreadall
 
 --------------------------------------------------------------------------------
 ## 3. Custom Role (Add-on for Deeper Investigation)
@@ -183,17 +174,23 @@ The identity deploying the ARM template requires:
 
 **Microsoft Entra ID (Minimum):**
 
-  - **Cloud Application Administrator** (Directory Role)
+  - **Cloud Application Administrator**
     - Creates App Registration
     - Creates Service Principal
     - Configures Federated Identity Credential
 
     Docs: https://learn.microsoft.com/en-us/entra/identity/role-based-access-control/permissions-reference#cloud-application-administrator
 
+  - **Privileged Role Administrator** (or Global Administrator)
+    - Assigns Directory Readers role to the Service Principal
+
+    Docs: https://learn.microsoft.com/en-us/entra/identity/role-based-access-control/permissions-reference#privileged-role-administrator
+
 **Azure RBAC (Minimum):**
 
   - **User Access Administrator** at the deployment scope
-    - Assigns roles to the Tamnoon Service Principal
+    - Assigns Azure RBAC roles (Reader, Storage Blob Data Reader, Log Analytics Reader)
+      to the Tamnoon Service Principal
 
     Docs: https://learn.microsoft.com/en-us/azure/role-based-access-control/built-in-roles#user-access-administrator
 
@@ -229,7 +226,7 @@ After template deployment, you can optionally:
 | Reader | Assign to User | Auto-assigned by Template |
 | Storage Blob Data Reader | Assign to User | Auto-assigned by Template |
 | Log Analytics Reader | Assign to User | Auto-assigned by Template |
-| Directory Readers (or `Directory.Read.All`) | Assign to User | Assign to Service Principal (or grant Graph API permission) |
+| Directory Readers | Assign to User | Assign to Service Principal |
 | Custom Role (Add-on) | Assign to User | Assign to Service Principal |
 | Entra Permissions Mgmt (Optional) | Assign to User | Assign to Service Principal |
 
@@ -240,7 +237,8 @@ After template deployment, you can optionally:
 | Domain | Role | Purpose |
 |--------|------|---------|
 | Entra ID | Cloud Application Administrator | Create App, SPN, Federated Credentials |
-| Azure RBAC | User Access Administrator | Assign roles at deployment scope |
+| Entra ID | Privileged Role Administrator | Assign Directory Readers to SPN |
+| Azure RBAC | User Access Administrator | Assign Azure RBAC roles at deployment scope |
 
 --------------------------------------------------------------------------------
 ## Implementation Notes
