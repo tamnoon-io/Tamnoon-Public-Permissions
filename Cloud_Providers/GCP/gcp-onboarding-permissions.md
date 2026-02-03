@@ -1,4 +1,4 @@
-![Tamnoon](images/Tamnoon.png)
+<img src="images/Tamnoon.png" width="470">
 
 # Tamnoon Onboarding - GCP Permissions Reference
 
