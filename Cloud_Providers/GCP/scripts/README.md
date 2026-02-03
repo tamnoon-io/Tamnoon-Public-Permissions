@@ -1,3 +1,5 @@
+<img src="../images/Tamnoon.png" width="470">
+
 # GCP Onboarding Scripts
 
 ## poc_onboarding.py
