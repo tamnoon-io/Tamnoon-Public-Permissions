@@ -8,21 +8,12 @@ This document provides an overview of Google Cloud Platform (GCP) roles needed b
 Permission requirement from this section applies if/when GCP organization wide onboarding is in scope.
 Sections 2. and 3. not applicable because of permissions inheritance.
 
-### Organization Viewer
-`roles/resourcemanager.organizationViewer`
-
-### Viewer
-`roles/viewer`
-
-Sufficient for folder-specific monitoring and basic resource visibility.
-
-### Private Logs Viewer
-`roles/logging.privateLogViewer`
-Essential when Data Access Logs or filtered views are needed at Organization level.
-
-### Service Usage Consumer
-`roles/serviceusage.serviceUsageConsumer`
-
+| Role | Purpose |
+|------|---------|
+| `roles/resourcemanager.organizationViewer` | View organization metadata and hierarchy structure |
+| `roles/viewer` | Read-only access to all resources, IAM policies, and recommender insights |
+| `roles/logging.privateLogViewer` | Access to Data Access Logs and filtered log views |
+| `roles/serviceusage.serviceUsageConsumer` | View enabled APIs and service usage quotas |
 
 -----------------------------
 ## 2. Folder-Level Onboarding
@@ -30,38 +21,22 @@ Essential when Data Access Logs or filtered views are needed at Organization lev
 This only applies when customer decides not to onboard their entire GCP Organization.
 All GCP projects within the various folders in scope will be covered.
 
-### Folder Viewer
-`roles/resourcemanager.folderViewer`
-
-### Viewer
-`roles/viewer`
-
-Sufficient for folder-specific monitoring and basic resource visibility.
-
-### Private Logs Viewer
-`roles/logging.privateLogViewer`
-
-This role is essential when Data Access Logs or filtered views are needed at folder level.
-
-### Service Usage Consumer
-`roles/serviceusage.serviceUsageConsumer`
-
+| Role | Purpose |
+|------|---------|
+| `roles/resourcemanager.folderViewer` | View folder metadata and contained projects |
+| `roles/viewer` | Read-only access to all resources, IAM policies, and recommender insights |
+| `roles/logging.privateLogViewer` | Access to Data Access Logs and filtered log views |
+| `roles/serviceusage.serviceUsageConsumer` | View enabled APIs and service usage quotas |
 
 ---------------------------------
 ## 3. Project-Level Onboarding
 ---------------------------------
-### Viewer
-`roles/viewer`
 
-Sufficient for project-specific monitoring and basic resource visibility.
-
-### Private Logs Viewer
-`roles/logging.privateLogViewer`
-
-Essential when Data Access Logs or filtered views are needed at Project level.
-
-### Service Usage Consumer
-`roles/serviceusage.serviceUsageConsumer`
+| Role | Purpose |
+|------|---------|
+| `roles/viewer` | Read-only access to all resources, IAM policies, and recommender insights |
+| `roles/logging.privateLogViewer` | Access to Data Access Logs and filtered log views |
+| `roles/serviceusage.serviceUsageConsumer` | View enabled APIs and service usage quotas |
 
 
 ---
