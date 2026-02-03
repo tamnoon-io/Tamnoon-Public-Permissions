@@ -13,6 +13,7 @@ Usage:
 """
 
 import argparse
+import re
 import subprocess
 import sys
 
@@ -85,6 +86,62 @@ def parse_resource_ids(input_str):
 def format_member(email, member_type):
     """Format member string for gcloud command."""
     return f"{member_type}:{email}"
+
+
+# =============================================================================
+# Input Validation Functions
+# =============================================================================
+
+def validate_email(email):
+    """Validate email format. Returns (is_valid, error_message)."""
+    pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+    if re.match(pattern, email):
+        return True, None
+    return False, f"Invalid email format: {email}"
+
+
+def validate_org_id(org_id):
+    """Validate organization ID (numeric). Returns (is_valid, error_message)."""
+    if org_id.isdigit() and len(org_id) >= 1:
+        return True, None
+    return False, f"Invalid organization ID: {org_id} (must be numeric)"
+
+
+def validate_folder_id(folder_id):
+    """Validate folder ID (numeric). Returns (is_valid, error_message)."""
+    if folder_id.isdigit() and len(folder_id) >= 1:
+        return True, None
+    return False, f"Invalid folder ID: {folder_id} (must be numeric)"
+
+
+def validate_project_id(project_id):
+    """Validate project ID format. Returns (is_valid, error_message)."""
+    # GCP project IDs: 6-30 chars, lowercase letters, digits, hyphens
+    # Must start with a letter, cannot end with hyphen
+    pattern = r'^[a-z][a-z0-9-]{4,28}[a-z0-9]$'
+    if re.match(pattern, project_id):
+        return True, None
+    return False, f"Invalid project ID: {project_id} (must be 6-30 chars, lowercase letters, digits, hyphens)"
+
+
+def validate_resources(scope_type, resources):
+    """Validate all resource IDs for the given scope. Returns (is_valid, errors)."""
+    errors = []
+
+    for resource_id in resources:
+        if scope_type == "organization":
+            valid, error = validate_org_id(resource_id)
+        elif scope_type == "folder":
+            valid, error = validate_folder_id(resource_id)
+        elif scope_type == "project":
+            valid, error = validate_project_id(resource_id)
+        else:
+            valid, error = False, f"Unknown scope type: {scope_type}"
+
+        if not valid:
+            errors.append(error)
+
+    return len(errors) == 0, errors
 
 
 # =============================================================================
@@ -273,6 +330,14 @@ def interactive_mode():
         print("Organization scope only supports a single organization ID.")
         resources = [resources[0]]
 
+    # Validate resource IDs
+    valid, errors = validate_resources(scope_type, resources)
+    if not valid:
+        print("\nValidation errors:")
+        for error in errors:
+            print(f"  - {error}")
+        return 1
+
     # 3. Get member email
     try:
         member_input = input(f"\nEnter member email [{DEFAULT_MEMBER}]: ").strip()
@@ -281,6 +346,12 @@ def interactive_mode():
         return 1
 
     member_email = member_input if member_input else DEFAULT_MEMBER
+
+    # Validate email
+    valid, error = validate_email(member_email)
+    if not valid:
+        print(f"\n{error}")
+        return 1
 
     # 4. Get member type
     try:
@@ -372,6 +443,20 @@ Examples:
             parser.error("--project-ids is required for project scope")
         resources = args.project_ids
         roles = PROJECT_ROLES
+
+    # Validate resource IDs
+    valid, errors = validate_resources(args.scope, resources)
+    if not valid:
+        print("Validation errors:")
+        for error in errors:
+            print(f"  - {error}")
+        return 1
+
+    # Validate email
+    valid, error = validate_email(args.member)
+    if not valid:
+        print(error)
+        return 1
 
     member = format_member(args.member, args.member_type)
 
