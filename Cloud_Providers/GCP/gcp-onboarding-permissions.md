@@ -1,3 +1,5 @@
+![Tamnoon](images/Tamnoon.png)
+
 # Tamnoon Onboarding - GCP Permissions Reference
 
 This document provides an overview of Google Cloud Platform (GCP) roles needed by GCP Users and/or Service Accounts created for Tamnoon CloudPros, to access your GCP Projects through GCP console, or programmatically. Associated permissions cover the majority of investigation playbooks, resource-listing operations, and log analysis via portal or API.
