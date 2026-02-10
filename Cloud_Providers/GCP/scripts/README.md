@@ -35,7 +35,7 @@ python3 poc_onboarding.py --scope project --project-ids proj-a proj-b proj-c
 python3 poc_onboarding.py --scope project --project-ids my-project -y
 
 # Custom member
-python3 poc_onboarding.py --scope project --project-ids my-project --member custom@example.com --member-type serviceAccount
+python3 poc_onboarding.py --scope project --project-ids my-project --member custom@example.com
 ```
 
 ### Options
@@ -47,8 +47,13 @@ python3 poc_onboarding.py --scope project --project-ids my-project --member cust
 | `--folder-ids` | One or more folder IDs (for folder scope) |
 | `--project-ids` | One or more project IDs (for project scope) |
 | `--member` | Member email (default: `tamnoonpoc@tamnoon.io`) |
-| `--member-type` | `user` or `serviceAccount` (default: `user`) |
 | `-y, --yes` | Skip confirmation prompt |
+
+### Example: Organization Scope
+
+<img src="../images/Org_Onboarding1.png" width="640">
+
+<img src="../images/Org_Onboarding2.png" width="640">
 
 ### Roles Assigned
 
