@@ -13,6 +13,7 @@ Sections 2. and 3. not applicable because of permissions inheritance.
 | Role | Purpose |
 |------|---------|
 | `roles/resourcemanager.organizationViewer` | View organization metadata and hierarchy structure |
+| `roles/iam.securityReviewer` | View IAM policies at organization, folder, and project levels (SA role visibility across hierarchy) |
 | `roles/viewer` | Read-only access to all resources, IAM policies, and recommender insights |
 | `roles/logging.privateLogViewer` | Access to Data Access Logs and filtered log views |
 | `roles/serviceusage.serviceUsageConsumer` | View enabled APIs and service usage quotas |
@@ -26,6 +27,7 @@ All GCP projects within the various folders in scope will be covered.
 | Role | Purpose |
 |------|---------|
 | `roles/resourcemanager.folderViewer` | View folder metadata and contained projects |
+| `roles/iam.securityReviewer` | View IAM policies at folder and project levels (SA role visibility across hierarchy) |
 | `roles/viewer` | Read-only access to all resources, IAM policies, and recommender insights |
 | `roles/logging.privateLogViewer` | Access to Data Access Logs and filtered log views |
 | `roles/serviceusage.serviceUsageConsumer` | View enabled APIs and service usage quotas |
@@ -67,6 +69,19 @@ For complete IAM analysis across the GCP hierarchy, `roles/viewer` must be grant
 
 **Without org-level access**, IAM investigations are limited to the assigned scope (folder or project), and deny policies or PAB restrictions at higher levels cannot be analyzed.
 
+### Why `roles/iam.securityReviewer` in Addition to `roles/viewer`
+
+`roles/viewer` includes `resourcemanager.projects.getIamPolicy` but does **not** include `resourcemanager.folders.getIamPolicy` or `resourcemanager.organizations.getIamPolicy`. This means `roles/viewer` alone cannot read IAM policies at folder or organization levels.
+
+`roles/iam.securityReviewer` fills this gap by providing:
+
+| Permission | Purpose |
+|------------|---------|
+| `resourcemanager.folders.getIamPolicy` | Read IAM policy bindings on folders — required to detect service account roles granted at folder level |
+| `resourcemanager.organizations.getIamPolicy` | Read IAM policy bindings on the organization — required to detect service account roles granted at org level |
+
+**Impact on Tamnoon scripts**: GCP Compute VM Analysis, Serverless Exposure Analysis, and Service Account usage scripts traverse the folder/org hierarchy to identify all IAM roles granted to a service account. Without `securityReviewer`, folder-level and org-level role grants are invisible — the scripts report partial results with an access error indicating the missing role.
+
 ---
 
 ## Custom Roles
@@ -105,6 +120,6 @@ The following GCP APIs must be enabled for full functionality:
 
 | Scope | Required Roles | IAM Investigation Capability |
 |-------|----------------|------------------------------|
-| Organization | `roles/viewer`, `roles/logging.privateLogViewer`, `roles/resourcemanager.organizationViewer`, `roles/serviceusage.serviceUsageConsumer` | Full - all deny policies, PAB, recommender insights |
-| Folder | `roles/viewer`, `roles/logging.privateLogViewer`, `roles/resourcemanager.folderViewer`, `roles/serviceusage.serviceUsageConsumer` | Partial - folder and project level only |
-| Project | `roles/viewer`, `roles/logging.privateLogViewer`, `roles/serviceusage.serviceUsageConsumer` | Limited - project level only |
+| Organization | `roles/viewer`, `roles/iam.securityReviewer`, `roles/logging.privateLogViewer`, `roles/resourcemanager.organizationViewer`, `roles/serviceusage.serviceUsageConsumer` | Full - all deny policies, PAB, recommender insights, SA role visibility across org/folder/project |
+| Folder | `roles/viewer`, `roles/iam.securityReviewer`, `roles/logging.privateLogViewer`, `roles/resourcemanager.folderViewer`, `roles/serviceusage.serviceUsageConsumer` | Partial - folder and project level SA role visibility, deny policies, PAB |
+| Project | `roles/viewer`, `roles/logging.privateLogViewer`, `roles/serviceusage.serviceUsageConsumer` | Limited - project level only (no folder/org SA role visibility) |
