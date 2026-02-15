@@ -13,7 +13,7 @@ Sections 2. and 3. not applicable because of permissions inheritance.
 | Role | Purpose |
 |------|---------|
 | `roles/resourcemanager.organizationViewer` | View organization metadata and hierarchy structure |
-| `roles/iam.securityReviewer` | View IAM policies at organization, folder, and project levels (SA role visibility across hierarchy) |
+| `roles/iam.securityReviewer` | View IAM policies at organization, folder, and project levels (role visibility for all identities across hierarchy) |
 | `roles/viewer` | Read-only access to all resources, IAM policies, and recommender insights |
 | `roles/logging.privateLogViewer` | Access to Data Access Logs and filtered log views |
 | `roles/serviceusage.serviceUsageConsumer` | View enabled APIs and service usage quotas |
@@ -27,7 +27,7 @@ All GCP projects within the various folders in scope will be covered.
 | Role | Purpose |
 |------|---------|
 | `roles/resourcemanager.folderViewer` | View folder metadata and contained projects |
-| `roles/iam.securityReviewer` | View IAM policies at folder and project levels (SA role visibility across hierarchy) |
+| `roles/iam.securityReviewer` | View IAM policies at folder and project levels (role visibility for all identities across hierarchy) |
 | `roles/viewer` | Read-only access to all resources, IAM policies, and recommender insights |
 | `roles/logging.privateLogViewer` | Access to Data Access Logs and filtered log views |
 | `roles/serviceusage.serviceUsageConsumer` | View enabled APIs and service usage quotas |
@@ -58,7 +58,7 @@ The following IAM investigation capabilities are available through `roles/viewer
 | **Policy Analyzer** | `policyanalyzer.serviceAccountLastAuthenticationActivities.query`, `policyanalyzer.serviceAccountKeyLastAuthenticationActivities.query`, `policyanalyzer.resourceAuthorizationActivities.query` | Via `roles/viewer` — query actual permission usage |
 | **Service Accounts** | `iam.serviceAccounts.get`, `iam.serviceAccounts.list`, `iam.serviceAccountKeys.get`, `iam.serviceAccountKeys.list` | Via `roles/viewer` — view service account configuration |
 | **Project IAM Policies** | `resourcemanager.projects.getIamPolicy` | Via `roles/viewer` — read IAM policy bindings at project level |
-| **Folder/Org IAM Policies** | `resourcemanager.folders.getIamPolicy`, `resourcemanager.organizations.getIamPolicy` | Via `roles/iam.securityReviewer` — `roles/viewer` does not include these. Without this, SA roles granted at folder or org level are invisible |
+| **Folder/Org IAM Policies** | `resourcemanager.folders.getIamPolicy`, `resourcemanager.organizations.getIamPolicy` | Via `roles/iam.securityReviewer` — `roles/viewer` does not include these. Without this, roles granted at folder or org level are invisible for all identities (users, groups, service accounts) |
 
 ### Scope-Level Requirements
 
@@ -66,11 +66,11 @@ These roles must be granted at the appropriate scope for full coverage. GCP IAM 
 
 | Scope | `roles/viewer` enables | `roles/iam.securityReviewer` enables |
 |-------|------------------------|--------------------------------------|
-| **Organization** | Deny policies, PAB, recommender insights, custom roles at all levels | SA role visibility across org, all folders, and all projects |
-| **Folder** | Deny policies, PAB, recommender insights within folder scope | SA role visibility across folder and contained projects |
+| **Organization** | Deny policies, PAB, recommender insights, custom roles at all levels | IAM policy visibility across org, all folders, and all projects |
+| **Folder** | Deny policies, PAB, recommender insights within folder scope | IAM policy visibility across folder and contained projects |
 | **Project** | Project-level IAM analysis only | Project-level IAM policy reads (already covered by `viewer`) |
 
-**Without org-level access**, IAM investigations are limited to the assigned scope (folder or project), and deny policies, PAB restrictions, or SA role grants at higher levels cannot be analyzed.
+**Without org-level access**, IAM investigations are limited to the assigned scope (folder or project), and deny policies, PAB restrictions, or IAM role grants at higher levels cannot be analyzed.
 
 ---
 
@@ -110,6 +110,6 @@ The following GCP APIs must be enabled for full functionality:
 
 | Scope | Required Roles | IAM Investigation Capability |
 |-------|----------------|------------------------------|
-| Organization | `roles/viewer`, `roles/iam.securityReviewer`, `roles/logging.privateLogViewer`, `roles/resourcemanager.organizationViewer`, `roles/serviceusage.serviceUsageConsumer` | Full - all deny policies, PAB, recommender insights, SA role visibility across org/folder/project |
-| Folder | `roles/viewer`, `roles/iam.securityReviewer`, `roles/logging.privateLogViewer`, `roles/resourcemanager.folderViewer`, `roles/serviceusage.serviceUsageConsumer` | Partial - folder and project level SA role visibility, deny policies, PAB |
-| Project | `roles/viewer`, `roles/logging.privateLogViewer`, `roles/serviceusage.serviceUsageConsumer` | Limited - project level only (no folder/org SA role visibility) |
+| Organization | `roles/viewer`, `roles/iam.securityReviewer`, `roles/logging.privateLogViewer`, `roles/resourcemanager.organizationViewer`, `roles/serviceusage.serviceUsageConsumer` | Full - deny policies, PAB, recommender insights, IAM policy visibility across org/folder/project |
+| Folder | `roles/viewer`, `roles/iam.securityReviewer`, `roles/logging.privateLogViewer`, `roles/resourcemanager.folderViewer`, `roles/serviceusage.serviceUsageConsumer` | Partial - folder and project level IAM policy visibility, deny policies, PAB |
+| Project | `roles/viewer`, `roles/logging.privateLogViewer`, `roles/serviceusage.serviceUsageConsumer` | Limited - project level only (no folder/org IAM policy visibility) |
