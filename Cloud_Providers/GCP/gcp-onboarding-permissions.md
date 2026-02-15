@@ -47,28 +47,30 @@ All GCP projects within the various folders in scope will be covered.
 
 ## IAM Investigation Permissions
 
-When `roles/viewer` is assigned, the following IAM investigation capabilities are included:
+The following IAM investigation capabilities are available through `roles/viewer` and `roles/iam.securityReviewer`:
 
 | Capability | Permissions Included | Notes |
 |------------|---------------------|-------|
-| **Deny Policies** | `iam.denypolicies.get`, `iam.denypolicies.list` | View deny policies blocking permissions |
-| **Role Definitions** | `iam.roles.get`, `iam.roles.list` | Enumerate permissions in roles |
-| **Principal Access Boundaries** | `iam.principalaccessboundarypolicies.get`, `iam.principalaccessboundarypolicies.list` | View PAB policies limiting resource access |
-| **IAM Recommender** | `recommender.iamPolicyRecommendations.get`, `recommender.iamPolicyRecommendations.list`, `recommender.iamServiceAccountInsights.get`, `recommender.iamServiceAccountInsights.list` | Unused permissions and service account activity insights |
-| **Policy Analyzer** | `policyanalyzer.serviceAccountLastAuthenticationActivities.query`, `policyanalyzer.serviceAccountKeyLastAuthenticationActivities.query`, `policyanalyzer.resourceAuthorizationActivities.query` | Query actual permission usage |
-| **Service Accounts** | `iam.serviceAccounts.get`, `iam.serviceAccounts.list`, `iam.serviceAccountKeys.get`, `iam.serviceAccountKeys.list` | View service account configuration |
-| **Folder/Org IAM Policies** | `resourcemanager.folders.getIamPolicy`, `resourcemanager.organizations.getIamPolicy` | Requires `roles/iam.securityReviewer` — `roles/viewer` only includes `projects.getIamPolicy`. Without this, SA roles granted at folder or org level are invisible |
+| **Deny Policies** | `iam.denypolicies.get`, `iam.denypolicies.list` | Via `roles/viewer` — view deny policies blocking permissions |
+| **Role Definitions** | `iam.roles.get`, `iam.roles.list` | Via `roles/viewer` — enumerate permissions in roles |
+| **Principal Access Boundaries** | `iam.principalaccessboundarypolicies.get`, `iam.principalaccessboundarypolicies.list` | Via `roles/viewer` — view PAB policies limiting resource access |
+| **IAM Recommender** | `recommender.iamPolicyRecommendations.get`, `recommender.iamPolicyRecommendations.list`, `recommender.iamServiceAccountInsights.get`, `recommender.iamServiceAccountInsights.list` | Via `roles/viewer` — unused permissions and service account activity insights |
+| **Policy Analyzer** | `policyanalyzer.serviceAccountLastAuthenticationActivities.query`, `policyanalyzer.serviceAccountKeyLastAuthenticationActivities.query`, `policyanalyzer.resourceAuthorizationActivities.query` | Via `roles/viewer` — query actual permission usage |
+| **Service Accounts** | `iam.serviceAccounts.get`, `iam.serviceAccounts.list`, `iam.serviceAccountKeys.get`, `iam.serviceAccountKeys.list` | Via `roles/viewer` — view service account configuration |
+| **Project IAM Policies** | `resourcemanager.projects.getIamPolicy` | Via `roles/viewer` — read IAM policy bindings at project level |
+| **Folder/Org IAM Policies** | `resourcemanager.folders.getIamPolicy`, `resourcemanager.organizations.getIamPolicy` | Via `roles/iam.securityReviewer` — `roles/viewer` does not include these. Without this, SA roles granted at folder or org level are invisible |
 
-### Organization-Level Requirement for IAM Investigations
+### Scope-Level Requirements
 
-For complete IAM analysis across the GCP hierarchy, `roles/viewer` must be granted at **Organization Level**. This enables:
+These roles must be granted at the appropriate scope for full coverage. GCP IAM policies can be attached at organization, folder, or project levels — a role granted only at project level cannot see policies at higher levels.
 
-- **Deny Policy Analysis**: Deny policies can be attached at organization, folder, or project levels. Org-level access ensures visibility into all deny policies that may affect principals.
-- **Principal Access Boundary Analysis**: PAB policies are typically defined at org-level and restrict which resources principals can access.
-- **IAM Recommender Insights**: Cross-project permission usage analysis requires org-level access for complete recommendations.
-- **Custom Role Visibility**: Organization-scoped custom roles are only visible with org-level access.
+| Scope | `roles/viewer` enables | `roles/iam.securityReviewer` enables |
+|-------|------------------------|--------------------------------------|
+| **Organization** | Deny policies, PAB, recommender insights, custom roles at all levels | SA role visibility across org, all folders, and all projects |
+| **Folder** | Deny policies, PAB, recommender insights within folder scope | SA role visibility across folder and contained projects |
+| **Project** | Project-level IAM analysis only | Project-level IAM policy reads (already covered by `viewer`) |
 
-**Without org-level access**, IAM investigations are limited to the assigned scope (folder or project), and deny policies or PAB restrictions at higher levels cannot be analyzed.
+**Without org-level access**, IAM investigations are limited to the assigned scope (folder or project), and deny policies, PAB restrictions, or SA role grants at higher levels cannot be analyzed.
 
 ---
 
