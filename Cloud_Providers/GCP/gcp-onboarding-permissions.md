@@ -57,6 +57,7 @@ When `roles/viewer` is assigned, the following IAM investigation capabilities ar
 | **IAM Recommender** | `recommender.iamPolicyRecommendations.get`, `recommender.iamPolicyRecommendations.list`, `recommender.iamServiceAccountInsights.get`, `recommender.iamServiceAccountInsights.list` | Unused permissions and service account activity insights |
 | **Policy Analyzer** | `policyanalyzer.serviceAccountLastAuthenticationActivities.query`, `policyanalyzer.serviceAccountKeyLastAuthenticationActivities.query`, `policyanalyzer.resourceAuthorizationActivities.query` | Query actual permission usage |
 | **Service Accounts** | `iam.serviceAccounts.get`, `iam.serviceAccounts.list`, `iam.serviceAccountKeys.get`, `iam.serviceAccountKeys.list` | View service account configuration |
+| **Folder/Org IAM Policies** | `resourcemanager.folders.getIamPolicy`, `resourcemanager.organizations.getIamPolicy` | Requires `roles/iam.securityReviewer` — `roles/viewer` only includes `projects.getIamPolicy`. Without this, SA roles granted at folder or org level are invisible |
 
 ### Organization-Level Requirement for IAM Investigations
 
@@ -68,19 +69,6 @@ For complete IAM analysis across the GCP hierarchy, `roles/viewer` must be grant
 - **Custom Role Visibility**: Organization-scoped custom roles are only visible with org-level access.
 
 **Without org-level access**, IAM investigations are limited to the assigned scope (folder or project), and deny policies or PAB restrictions at higher levels cannot be analyzed.
-
-### Why `roles/iam.securityReviewer` in Addition to `roles/viewer`
-
-`roles/viewer` includes `resourcemanager.projects.getIamPolicy` but does **not** include `resourcemanager.folders.getIamPolicy` or `resourcemanager.organizations.getIamPolicy`. This means `roles/viewer` alone cannot read IAM policies at folder or organization levels.
-
-`roles/iam.securityReviewer` fills this gap by providing:
-
-| Permission | Purpose |
-|------------|---------|
-| `resourcemanager.folders.getIamPolicy` | Read IAM policy bindings on folders — required to detect service account roles granted at folder level |
-| `resourcemanager.organizations.getIamPolicy` | Read IAM policy bindings on the organization — required to detect service account roles granted at org level |
-
-**Impact on Tamnoon scripts**: GCP Compute VM Analysis, Serverless Exposure Analysis, and Service Account usage scripts traverse the folder/org hierarchy to identify all IAM roles granted to a service account. Without `securityReviewer`, folder-level and org-level role grants are invisible — the scripts report partial results with an access error indicating the missing role.
 
 ---
 
