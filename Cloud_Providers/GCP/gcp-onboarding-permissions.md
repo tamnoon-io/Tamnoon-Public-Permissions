@@ -189,3 +189,16 @@ If `roles/logging.privateLogViewer` cannot be assigned, Tamnoon recommends creat
 | **Organization** | `roles/viewer`, `roles/browser`, `roles/iam.securityReviewer`, `roles/cloudasset.viewer`, `roles/logging.privateLogViewer`, `roles/serviceusage.serviceUsageConsumer` | Full — all resources, IAM policies at all levels, cross-project search, hierarchy navigation, data access logs |
 | **Folder** | `roles/viewer`, `roles/browser`, `roles/iam.securityReviewer`, `roles/cloudasset.viewer`, `roles/logging.privateLogViewer`, `roles/serviceusage.serviceUsageConsumer` | Partial — folder and contained projects only |
 | **Project** | `roles/viewer`, `roles/logging.privateLogViewer`, `roles/serviceusage.serviceUsageConsumer` | Limited — single project, no hierarchy or cross-project visibility |
+
+---
+
+## 7. Optional Integrations
+
+The roles above cover GCP IAM investigation and analysis. Additional integrations are available for broader coverage:
+
+| Integration | Purpose | Roles Required | Doc |
+|-------------|---------|----------------|-----|
+| **Security Command Center** | Ingest SCC findings (threats, vulnerabilities, attack paths) for correlation with IAM data | Dedicated `roles/securitycenter.*` roles | [SCC Integration](gcp-scc-integration.md) |
+| **Google Workspace** | Enrich user/group investigations with identity context (name, OU, status, group membership) | Domain-wide delegation with Admin SDK read-only scopes | [Workspace Integration](gcp-workspace-integration.md) |
+
+**Note**: Neither `roles/viewer` nor `roles/iam.securityReviewer` include SCC permissions. SCC and Workspace require separate configuration.
