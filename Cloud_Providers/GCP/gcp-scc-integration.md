@@ -23,9 +23,9 @@
 ## Fallback — Dedicated SCC Roles
 
 Dedicated SCC roles are only needed when:
-- Tamnoon is onboarded at **project level** (where `roles/iam.securityReviewer` is not assigned)
 - The customer wants **granular SCC role control** separate from the security reviewer role
 - SCC is activated at folder level and the customer prefers dedicated SCC roles per folder
+- `roles/iam.securityReviewer` cannot be assigned for policy reasons
 
 ### Organization-Level SCC
 

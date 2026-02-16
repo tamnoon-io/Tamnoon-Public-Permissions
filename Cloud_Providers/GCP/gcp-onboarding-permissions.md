@@ -97,10 +97,13 @@ Applies when the customer decides not to onboard their entire GCP Organization. 
 | Role | Purpose |
 |------|---------|
 | `roles/viewer` | Read-only access to all resources and project-level IAM policies |
+| `roles/browser` | Navigate project hierarchy context |
+| `roles/iam.securityReviewer` | Read project IAM policies + SCC findings within the project |
+| `roles/cloudasset.viewer` | Search IAM bindings and resources within the project |
 | `roles/logging.privateLogViewer` | Access Data Access Logs and filtered log views |
 | `roles/serviceusage.serviceUsageConsumer` | View enabled APIs and service usage quotas |
 
-**Note:** Project-level onboarding does not include `roles/browser`, `roles/iam.securityReviewer`, or `roles/cloudasset.viewer` because these capabilities require a higher scope (folder or organization) to be effective.
+**Note:** At project scope, `roles/browser`, `roles/iam.securityReviewer`, and `roles/cloudasset.viewer` are limited to the single project — they cannot see folder/org hierarchy or cross-project bindings. Organization-level onboarding is recommended for full coverage.
 
 ---
 
@@ -188,7 +191,7 @@ If `roles/logging.privateLogViewer` cannot be assigned, Tamnoon recommends creat
 |-------|-------|----------|
 | **Organization** | `roles/viewer`, `roles/browser`, `roles/iam.securityReviewer`, `roles/cloudasset.viewer`, `roles/logging.privateLogViewer`, `roles/serviceusage.serviceUsageConsumer` | Full — all resources, IAM policies at all levels, cross-project search, hierarchy navigation, data access logs |
 | **Folder** | `roles/viewer`, `roles/browser`, `roles/iam.securityReviewer`, `roles/cloudasset.viewer`, `roles/logging.privateLogViewer`, `roles/serviceusage.serviceUsageConsumer` | Partial — folder and contained projects only |
-| **Project** | `roles/viewer`, `roles/logging.privateLogViewer`, `roles/serviceusage.serviceUsageConsumer` | Limited — single project, no hierarchy or cross-project visibility |
+| **Project** | `roles/viewer`, `roles/browser`, `roles/iam.securityReviewer`, `roles/cloudasset.viewer`, `roles/logging.privateLogViewer`, `roles/serviceusage.serviceUsageConsumer` | Limited — same 6 roles but scoped to single project only |
 
 ---
 
