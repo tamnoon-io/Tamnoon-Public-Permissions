@@ -126,15 +126,15 @@ Group:                  platform-admins@company.com
 | `archived: true` | Workspace Admin SDK | User archived — still consumes license, no access |
 | SA `description` contains `owners` | GCP IAM API | SA owner may have departed — cross-reference with Workspace |
 
-### Script Integration Points
+### Investigation Use Cases
 
-| Script | Workspace Enrichment | Benefit |
-|--------|---------------------|---------|
-| `service_account_usage.py` | Resolve group bindings → member count, expand nested groups | Blast radius of group-based SA access |
-| `service_account_usage.py` | Parse SA `description` → cross-reference owners with Workspace status | Flag SAs owned by departed users |
-| `gcpvm_analysis.py` | Resolve `user:` / `group:` in IAM policies | Identity context for VM access investigation |
-| `gcpserverless_analysis.py` | Resolve invoker bindings (`allUsers` vs specific groups) | Understand who can invoke the service |
-| `serviceaccountkeyusage.py` | Parse SA `description` → owner status in Workspace | Flag keys for SAs owned by departed users |
+| Use Case | Workspace Enrichment | Benefit |
+|----------|---------------------|---------|
+| SA permissions audit | Cross-reference SA `description` owners with Workspace user status | Flag SAs owned by departed users (orphaned SAs) |
+| SA key activity analysis | Validate SA owner status when assessing key remediation priority | Orphaned SA + dormant key = higher priority |
+| VM impact analysis | Resolve impersonation callers (`user:`) to OU, status, department | Triage context — contractor vs staff, active vs suspended |
+| Serverless exposure analysis | Expand `group:` invoker bindings to member count | Blast radius — group of 3 vs group of 300 = different risk |
+| Any IAM binding analysis | Resolve `group:` principals to effective member count | Understand true scope of group-based role grants |
 
 ---
 
@@ -146,7 +146,7 @@ GCP service accounts have a freeform `description` field that teams often use to
 {
   "owners": ["alice@company.com", "bob@company.com"],
   "provenance": "terraform",
-  "tickets": ["CAE-23848"]
+  "tickets": ["JIRA-1234"]
 }
 ```
 
