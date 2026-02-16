@@ -61,7 +61,7 @@ All roles are read-only. The table below explains what each role provides and th
 |------|---------|----------------------------|
 | `roles/viewer` | Read-only access to all resources, project-level IAM policies, recommender insights, policy analyzer | Base read access — but cannot navigate folder/org hierarchy, read folder/org IAM policies, access data access logs, or search assets across projects |
 | `roles/browser` | Navigate organization, folder, and project hierarchy | `roles/viewer` cannot list folders (`folders.get`, `folders.list`) or view organization metadata (`organizations.get`). Required for hierarchy traversal in scripts |
-| `roles/iam.securityReviewer` | Read IAM policies at folder and organization levels | `roles/viewer` only includes `projects.getIamPolicy` — it does **not** include `folders.getIamPolicy` or `organizations.getIamPolicy`. Without this, IAM role grants at folder or org level are invisible for all identities |
+| `roles/iam.securityReviewer` | Read IAM policies at all levels + SCC findings + security-relevant list permissions across all services (2,366 permissions) | `roles/viewer` only includes `projects.getIamPolicy` — it does **not** include `folders.getIamPolicy` or `organizations.getIamPolicy`. Also provides SCC access (`securitycenter.findings.list`, `securitycenter.assets.list`, `securitycenter.attackpaths.list`) — no separate SCC roles needed |
 | `roles/cloudasset.viewer` | Bulk search IAM bindings and resources across the org | No other role provides cross-project IAM search. Required to discover where an identity (user, group, SA) has access beyond a single project — single API call returns all bindings org-wide |
 | `roles/logging.privateLogViewer` | Read Data Access Logs and filtered log views | `roles/viewer` includes basic log reads but **not** data access audit logs (which record who accessed what data) |
 | `roles/serviceusage.serviceUsageConsumer` | View enabled APIs and service usage quotas | `roles/viewer` does not include service usage permissions |
@@ -192,13 +192,25 @@ If `roles/logging.privateLogViewer` cannot be assigned, Tamnoon recommends creat
 
 ---
 
-## 7. Optional Integrations
+## 7. SCC Coverage via Security Reviewer
 
-The roles above cover GCP IAM investigation and analysis. Additional integrations are available for broader coverage:
+`roles/iam.securityReviewer` includes 22 SCC permissions — no separate SCC roles needed for standard use:
 
-| Integration | Purpose | Roles Required | Doc |
-|-------------|---------|----------------|-----|
-| **Security Command Center** | Ingest SCC findings (threats, vulnerabilities, attack paths) for correlation with IAM data | Dedicated `roles/securitycenter.*` roles | [SCC Integration](gcp-scc-integration.md) |
+| SCC Permission | Capability |
+|----------------|------------|
+| `securitycenter.findings.list` | List threat, vulnerability, and misconfiguration findings |
+| `securitycenter.assets.list` | List SCC asset inventory |
+| `securitycenter.attackpaths.list` | List attack path simulations |
+| `securitycenter.sources.list` | List SCC finding sources |
+
+**When separate SCC roles ARE still needed**: If Tamnoon is onboarded at **project level** (no `roles/iam.securityReviewer`), or if SCC is activated at folder level and the customer needs granular SCC role control. See [SCC Integration](gcp-scc-integration.md) for folder-level role details.
+
+---
+
+## 8. Optional Integrations
+
+| Integration | Purpose | Configuration | Doc |
+|-------------|---------|---------------|-----|
 | **Google Workspace** | Enrich user/group investigations with identity context (name, OU, status, group membership) | Domain-wide delegation with Admin SDK read-only scopes | [Workspace Integration](gcp-workspace-integration.md) |
 
-**Note**: Neither `roles/viewer` nor `roles/iam.securityReviewer` include SCC permissions. SCC and Workspace require separate configuration.
+**Note**: Workspace is the only integration that requires configuration beyond the standard onboarding roles. SCC access is already covered by `roles/iam.securityReviewer` at org/folder scope.
