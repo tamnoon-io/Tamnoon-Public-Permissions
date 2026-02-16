@@ -11,6 +11,7 @@ Usage:
     python3 tamnoon_onboarding.py --scope folder --folder-ids 111 222 333
     python3 tamnoon_onboarding.py --scope project --project-ids proj-a proj-b -y
     python3 tamnoon_onboarding.py --scope project --project-ids proj-a --enable-apis
+    python3 tamnoon_onboarding.py --scope organization --org-id 123456789 --member team@company.com --member-type group
 """
 
 import argparse
@@ -43,6 +44,9 @@ FOLDER_ROLES = [
 
 PROJECT_ROLES = [
     "roles/viewer",
+    "roles/browser",
+    "roles/iam.securityReviewer",
+    "roles/cloudasset.viewer",
     "roles/logging.privateLogViewer",
     "roles/serviceusage.serviceUsageConsumer",
 ]
@@ -573,12 +577,17 @@ def interactive_mode():
 
     # 4. Get member type
     try:
-        type_input = input("Member type - (u)ser or (s)erviceAccount [u]: ").strip().lower()
+        type_input = input("Member type - (u)ser, (s)erviceAccount, or (g)roup [u]: ").strip().lower()
     except (KeyboardInterrupt, EOFError):
         print("\nCancelled.")
         return 1
 
-    member_type = "serviceAccount" if type_input in ('s', 'serviceaccount') else "user"
+    if type_input in ('s', 'serviceaccount'):
+        member_type = "serviceAccount"
+    elif type_input in ('g', 'group'):
+        member_type = "group"
+    else:
+        member_type = "user"
     member = format_member(member_email, member_type)
 
     # 5. Show validation and confirm
@@ -637,8 +646,8 @@ Examples:
                         help="One or more project IDs (for project scope)")
     parser.add_argument("--member", default=DEFAULT_MEMBER,
                         help=f"Member email (default: {DEFAULT_MEMBER})")
-    parser.add_argument("--member-type", choices=["user", "serviceAccount"], default="user",
-                        help="Member type (default: user)")
+    parser.add_argument("--member-type", choices=["user", "serviceAccount", "group"], default="user",
+                        help="Member type: user, serviceAccount, or group (default: user)")
     parser.add_argument("--enable-apis", action="store_true",
                         help="Enable required GCP APIs on projects in scope")
     parser.add_argument("--yes", "-y", action="store_true",
