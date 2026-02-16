@@ -167,9 +167,59 @@ The following GCP APIs must be enabled on each project in scope. APIs are groupe
 
 ---
 
-## 5. Custom Roles (Fallback)
+## 5. Custom Roles
 
-### Custom Logs Viewer
+### Tamnoon Security Assessment Role
+
+The 6 predefined roles (Section 2) cover IAM investigation, audit log analysis, and resource enumeration. However, certain security assessment scenarios require permissions that no predefined read-only role provides. These are collected into a single custom role.
+
+**Role name**: `TamnoonSecurityAssessment` (organization-level)
+
+| Permission | Use Case | Why needed |
+|------------|----------|------------|
+| `container.secrets.get` | GKE credential exposure assessment | `roles/viewer` includes `container.secrets.list` (see secret names) but NOT `.get` (read secret data). Required to determine whether K8s secrets contain cleartext cloud credentials (SA keys, API tokens) — the core of "container with cleartext cloud keys" investigations |
+| `artifactregistry.repositories.downloadArtifacts` | Container image scanning | Required to pull container images from Artifact Registry / GAR for layer-by-layer inspection. SA key JSON files baked into image layers during build are invisible from the running container filesystem — only detectable by scanning image layers |
+| `storage.objects.get` | GCR image pull + IaC state file inspection | GCR stores images as Cloud Storage objects. Also enables reading Terraform state files to understand how resources were provisioned and map infrastructure-as-code to live resources |
+
+#### Investigation Scenarios
+
+**Container with cleartext cloud keys granting high privileges**
+
+A container image or K8s secret contains a GCP service account key (JSON with `"type": "service_account"` + `"private_key"`), and that SA has high-privilege roles. Investigation requires:
+
+1. **List K8s secrets** (`container.secrets.list` — already in `roles/viewer`) — identify secrets mounted by the pod
+2. **Read K8s secret data** (`container.secrets.get` — custom role) — determine if secrets contain SA key JSON or other cloud credentials
+3. **Pull container image** (`artifactregistry.repositories.downloadArtifacts` + `storage.objects.get` — custom role) — scan image layers for embedded key files that may have been deleted in a later layer but remain in the image history
+4. **Check SA privileges** (`cloudasset.viewer` — already assigned) — assess the blast radius of the exposed credentials
+
+Without this custom role, Tamnoon can identify the workload (StatefulSet, Deployment), its Workload Identity binding, and the SA's IAM roles — but cannot verify whether cleartext credentials actually exist in secrets or image layers.
+
+**Terraform state file analysis**
+
+Terraform state files (typically in Cloud Storage) contain the full mapping of IaC declarations to live resources, including resource IDs, configurations, and sometimes sensitive outputs. `storage.objects.get` enables reading these files to understand provisioning context during investigations.
+
+#### Creating the Custom Role
+
+```bash
+gcloud iam roles create TamnoonSecurityAssessment \
+  --organization=ORGANIZATION_ID \
+  --title="Tamnoon Security Assessment" \
+  --description="Additional read permissions for security assessment scenarios (GKE secrets, container images, IaC state)" \
+  --permissions=container.secrets.get,artifactregistry.repositories.downloadArtifacts,storage.objects.get \
+  --stage=GA
+```
+
+Then assign to the Tamnoon principal:
+
+```bash
+gcloud organizations add-iam-policy-binding ORGANIZATION_ID \
+  --member="user:tamnoonpoc@tamnoon.io" \
+  --role="organizations/ORGANIZATION_ID/roles/TamnoonSecurityAssessment"
+```
+
+---
+
+### Custom Logs Viewer (Fallback)
 
 If `roles/logging.privateLogViewer` cannot be assigned, Tamnoon recommends creating the following custom role at the onboarding scope:
 
@@ -189,9 +239,13 @@ If `roles/logging.privateLogViewer` cannot be assigned, Tamnoon recommends creat
 
 | Scope | Roles | Coverage |
 |-------|-------|----------|
-| **Organization** | `roles/viewer`, `roles/browser`, `roles/iam.securityReviewer`, `roles/cloudasset.viewer`, `roles/logging.privateLogViewer`, `roles/serviceusage.serviceUsageConsumer` | Full — all resources, IAM policies at all levels, cross-project search, hierarchy navigation, data access logs |
-| **Folder** | `roles/viewer`, `roles/browser`, `roles/iam.securityReviewer`, `roles/cloudasset.viewer`, `roles/logging.privateLogViewer`, `roles/serviceusage.serviceUsageConsumer` | Partial — folder and contained projects only |
-| **Project** | `roles/viewer`, `roles/browser`, `roles/iam.securityReviewer`, `roles/cloudasset.viewer`, `roles/logging.privateLogViewer`, `roles/serviceusage.serviceUsageConsumer` | Limited — same 6 roles but scoped to single project only |
+| **Organization** | 6 predefined roles + `TamnoonSecurityAssessment` custom role | Full — all resources, IAM policies at all levels, cross-project search, hierarchy navigation, data access logs, GKE secret inspection, container image scanning |
+| **Folder** | 6 predefined roles + `TamnoonSecurityAssessment` custom role | Partial — folder and contained projects only |
+| **Project** | 6 predefined roles + `TamnoonSecurityAssessment` custom role | Limited — same roles but scoped to single project only |
+
+**Predefined roles**: `roles/viewer`, `roles/browser`, `roles/iam.securityReviewer`, `roles/cloudasset.viewer`, `roles/logging.privateLogViewer`, `roles/serviceusage.serviceUsageConsumer`
+
+**Custom role**: `TamnoonSecurityAssessment` — `container.secrets.get`, `artifactregistry.repositories.downloadArtifacts`, `storage.objects.get`
 
 ---
 
