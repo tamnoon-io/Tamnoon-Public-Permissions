@@ -4,6 +4,8 @@
 
 Enriches GCP IAM investigations with identity context from Google Workspace / Cloud Identity. This is an **optional** integration — GCP IAM investigations work without it, but Workspace data fills critical gaps when investigating user and group principals.
 
+> **Requires Service Account Principal**: Domain-wide delegation only works with `google.oauth2.service_account.Credentials` (not user credentials). The current Tamnoon user principal (`tamnoonpoc@tamnoon.io`) cannot perform Workspace queries. This integration becomes available when Tamnoon transitions to a service account principal with workload identity federation.
+
 ---
 
 ## 1. What It Provides

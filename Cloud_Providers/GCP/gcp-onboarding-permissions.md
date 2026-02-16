@@ -21,10 +21,10 @@ We strongly recommend Organization-level onboarding — it covers all GCP projec
 
 ### Tamnoon Principal
 
-| Principal | Type | Status |
-|-----------|------|--------|
-| `tamnoonpoc@tamnoon.io` | User | Current |
-| TBD | Service Account | Planned |
+| Principal | Type | Status | Capabilities |
+|-----------|------|--------|-------------|
+| `tamnoonpoc@tamnoon.io` | User | Current | GCP IAM, SCC, Cloud Asset API |
+| TBD | Service Account (workload identity federation) | Planned | All current + Workspace Admin SDK (domain-wide delegation) |
 
 ### Organization Policy Constraints
 
