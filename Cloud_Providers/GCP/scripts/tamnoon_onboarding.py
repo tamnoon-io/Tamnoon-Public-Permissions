@@ -577,17 +577,12 @@ def interactive_mode():
 
     # 4. Get member type
     try:
-        type_input = input("Member type - (u)ser, (s)erviceAccount, or (g)roup [u]: ").strip().lower()
+        type_input = input("Member type - (u)ser or (s)erviceAccount [u]: ").strip().lower()
     except (KeyboardInterrupt, EOFError):
         print("\nCancelled.")
         return 1
 
-    if type_input in ('s', 'serviceaccount'):
-        member_type = "serviceAccount"
-    elif type_input in ('g', 'group'):
-        member_type = "group"
-    else:
-        member_type = "user"
+    member_type = "serviceAccount" if type_input in ('s', 'serviceaccount') else "user"
     member = format_member(member_email, member_type)
 
     # 5. Show validation and confirm
