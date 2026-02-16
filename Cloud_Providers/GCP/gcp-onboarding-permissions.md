@@ -123,16 +123,44 @@ IAM roles are evaluated at the scope where they are granted. A role granted at p
 
 ## 4. Required APIs
 
-The following GCP APIs must be enabled on each project in scope:
+The following GCP APIs must be enabled on each project in scope. APIs are grouped by category — not all are required for every engagement.
 
-| API | Purpose |
-|-----|---------|
-| Cloud Resource Manager API | Project/folder/org hierarchy traversal |
-| IAM API | Role and permission analysis |
-| Cloud Asset API | Cross-project IAM and resource search |
-| Recommender API | IAM policy recommendations and insights |
-| Policy Analyzer API | Permission usage activity analysis |
-| Cloud Logging API | Audit log access |
+### Core (Required for all investigations)
+
+| API | Service Name | Purpose |
+|-----|-------------|---------|
+| Cloud Resource Manager | `cloudresourcemanager.googleapis.com` | Project/folder/org hierarchy traversal and IAM policy reads |
+| IAM | `iam.googleapis.com` | Service account metadata, key listing, role analysis |
+| Cloud Logging | `logging.googleapis.com` | Audit logs, SA activity, request logs, impersonation detection |
+| Cloud Asset | `cloudasset.googleapis.com` | Cross-project IAM binding and resource search |
+| Policy Analyzer | `policyanalyzer.googleapis.com` | SA and key last authentication times (90d) |
+| Recommender | `recommender.googleapis.com` | IAM policy recommendations and unused permission insights |
+| Service Usage | `serviceusage.googleapis.com` | Detect which APIs are enabled per project |
+
+### Compute & Networking
+
+| API | Service Name | Purpose |
+|-----|-------------|---------|
+| Compute Engine | `compute.googleapis.com` | VM instances, firewall rules, load balancers, instance groups, serverless NEGs |
+
+### Serverless
+
+| API | Service Name | Purpose |
+|-----|-------------|---------|
+| Cloud Run Admin | `run.googleapis.com` | Cloud Run services, IAM policies, deployment metadata |
+| Cloud Functions | `cloudfunctions.googleapis.com` | Cloud Functions (Gen1 + Gen2), IAM policies, triggers |
+| Eventarc | `eventarc.googleapis.com` | Trigger detection for serverless upstream context |
+| Pub/Sub | `pubsub.googleapis.com` | Push endpoint detection for serverless upstream context |
+| API Gateway | `apigateway.googleapis.com` | API Gateway upstream auth context (OpenAPI spec inspection) |
+
+### Data & Storage
+
+| API | Service Name | Purpose |
+|-----|-------------|---------|
+| BigQuery | `bigquery.googleapis.com` | Log Analytics queries, BQ audit sink queries (extended history) |
+| Cloud Storage | `storage.googleapis.com` | Bucket analysis (public access, versioning, IAM policies) |
+| Cloud SQL Admin | `sqladmin.googleapis.com` | SQL instance configuration and flag analysis |
+| Secret Manager | `secretmanager.googleapis.com` | Credential access for remediation scripts |
 
 ---
 
