@@ -2,83 +2,145 @@
 
 # Tamnoon Onboarding - GCP Permissions Reference
 
-This document provides an overview of Google Cloud Platform (GCP) roles needed by GCP Users and/or Service Accounts created for Tamnoon CloudPros, to access your GCP Projects through GCP console, or programmatically. Associated permissions cover the majority of investigation playbooks, resource-listing operations, and log analysis via portal or API.
-
---------------------------------
-## 1. Organization-Level Onboarding
---------------------------------
-Permission requirement from this section applies if/when GCP organization wide onboarding is in scope.
-Sections 2. and 3. not applicable because of permissions inheritance.
-
-| Role | Purpose |
-|------|---------|
-| `roles/resourcemanager.organizationViewer` | View organization metadata and hierarchy structure |
-| `roles/iam.securityReviewer` | View IAM policies at organization, folder, and project levels (role visibility for all identities across hierarchy) |
-| `roles/viewer` | Read-only access to all resources, IAM policies, and recommender insights |
-| `roles/logging.privateLogViewer` | Access to Data Access Logs and filtered log views |
-| `roles/serviceusage.serviceUsageConsumer` | View enabled APIs and service usage quotas |
-
------------------------------
-## 2. Folder-Level Onboarding
------------------------------
-This only applies when customer decides not to onboard their entire GCP Organization.
-All GCP projects within the various folders in scope will be covered.
-
-| Role | Purpose |
-|------|---------|
-| `roles/resourcemanager.folderViewer` | View folder metadata and contained projects |
-| `roles/iam.securityReviewer` | View IAM policies at folder and project levels (role visibility for all identities across hierarchy) |
-| `roles/viewer` | Read-only access to all resources, IAM policies, and recommender insights |
-| `roles/logging.privateLogViewer` | Access to Data Access Logs and filtered log views |
-| `roles/serviceusage.serviceUsageConsumer` | View enabled APIs and service usage quotas |
-
----------------------------------
-## 3. Project-Level Onboarding
----------------------------------
-
-| Role | Purpose |
-|------|---------|
-| `roles/viewer` | Read-only access to all resources, IAM policies, and recommender insights |
-| `roles/logging.privateLogViewer` | Access to Data Access Logs and filtered log views |
-| `roles/serviceusage.serviceUsageConsumer` | View enabled APIs and service usage quotas |
-
+This document defines the GCP IAM roles assigned to the Tamnoon principal for investigation and analysis. All roles are read-only.
 
 ---
 
-## IAM Investigation Permissions
+## 1. Prerequisites
 
-The following IAM investigation capabilities are available through `roles/viewer` and `roles/iam.securityReviewer`:
+### Operator Permissions
 
-| Capability | Permissions Included | Notes |
-|------------|---------------------|-------|
-| **Deny Policies** | `iam.denypolicies.get`, `iam.denypolicies.list` | Via `roles/viewer` — view deny policies blocking permissions |
-| **Role Definitions** | `iam.roles.get`, `iam.roles.list` | Via `roles/viewer` — enumerate permissions in roles |
-| **Principal Access Boundaries** | `iam.principalaccessboundarypolicies.get`, `iam.principalaccessboundarypolicies.list` | Via `roles/viewer` — view PAB policies limiting resource access |
-| **IAM Recommender** | `recommender.iamPolicyRecommendations.get`, `recommender.iamPolicyRecommendations.list`, `recommender.iamServiceAccountInsights.get`, `recommender.iamServiceAccountInsights.list` | Via `roles/viewer` — unused permissions and service account activity insights |
-| **Policy Analyzer** | `policyanalyzer.serviceAccountLastAuthenticationActivities.query`, `policyanalyzer.serviceAccountKeyLastAuthenticationActivities.query`, `policyanalyzer.resourceAuthorizationActivities.query` | Via `roles/viewer` — query actual permission usage |
-| **Service Accounts** | `iam.serviceAccounts.get`, `iam.serviceAccounts.list`, `iam.serviceAccountKeys.get`, `iam.serviceAccountKeys.list` | Via `roles/viewer` — view service account configuration |
-| **Project IAM Policies** | `resourcemanager.projects.getIamPolicy` | Via `roles/viewer` — read IAM policy bindings at project level |
-| **Folder/Org IAM Policies** | `resourcemanager.folders.getIamPolicy`, `resourcemanager.organizations.getIamPolicy` | Via `roles/iam.securityReviewer` — `roles/viewer` does not include these. Without this, roles granted at folder or org level are invisible for all identities (users, groups, service accounts) |
+The user performing the onboarding must have sufficient permissions to assign IAM roles at the target scope.
 
-### Scope-Level Requirements
+| Onboarding Scope | Operator Requirements |
+|------------------|-----------------------|
+| **Organization** | GCP Organization Owner, or a user with `roles/iam.serviceAccountAdmin`, `roles/iam.organizationRoleAdmin`, `roles/iam.securityAdmin` at org level |
+| **Project** | GCP Project Owner (or higher) |
 
-These roles must be granted at the appropriate scope for full coverage. GCP IAM policies can be attached at organization, folder, or project levels — a role granted only at project level cannot see policies at higher levels.
+We strongly recommend Organization-level onboarding — it covers all GCP projects (existing and future) automatically through IAM inheritance.
 
-| Scope | `roles/viewer` enables | `roles/iam.securityReviewer` enables |
-|-------|------------------------|--------------------------------------|
-| **Organization** | Deny policies, PAB, recommender insights, custom roles at all levels | IAM policy visibility across org, all folders, and all projects |
-| **Folder** | Deny policies, PAB, recommender insights within folder scope | IAM policy visibility across folder and contained projects |
-| **Project** | Project-level IAM analysis only | Project-level IAM policy reads (already covered by `viewer`) |
+### Tamnoon Principal
 
-**Without org-level access**, IAM investigations are limited to the assigned scope (folder or project), and deny policies, PAB restrictions, or IAM role grants at higher levels cannot be analyzed.
+| Principal | Type | Status |
+|-----------|------|--------|
+| `tamnoonpoc@tamnoon.io` | User | Current |
+| TBD | Service Account | Planned |
+
+### Organization Policy Constraints
+
+For GCP organizations created after May 3, 2024, the default organization policy restricts IAM access to your organization's domain only. To allow Tamnoon access, update one of the following constraints:
+
+**Option 1 — Modern constraint: `iam.managed.allowedPolicyMembers` (Recommended)**
+
+1. In the GCP Console, navigate to **IAM & Admin > Organization policies**
+2. Search for **Allowed Policy Member Types** (ID: `constraints/iam.managed.allowedPolicyMembers`)
+3. Click **Edit Policy** and add a rule (or edit existing)
+4. Under **Custom Values**, add the Tamnoon principal
+
+**Option 2 — Legacy constraint: `iam.allowedPolicyMemberDomains`**
+
+1. In the GCP Console, navigate to **IAM & Admin > Organization policies**
+2. Search for **Domain restricted sharing** (ID: `constraints/iam.allowedPolicyMemberDomains`)
+3. Click **Edit Policy** and add a rule (or edit existing)
+4. Configure the rule:
+   - Policy values: **Custom**
+   - Policy enforcement: **Allow**
+   - Value: Add the Tamnoon Customer ID (provided during onboarding)
+5. Verify your own organization's Customer ID is also present in an Allow rule to avoid locking out your own users
+6. Click **Set policy**
 
 ---
 
-## Custom Roles
+## 2. Roles Assigned to Tamnoon
 
-### Custom Logs Viewer for Tamnoon CloudPro
+### Role Inventory
 
-Should `roles/logging.privateLogViewer` not be assigned, Tamnoon recommends creating the below GCP Custom Role at **GCP Organization Level**.
+All roles are read-only. The table below explains what each role provides and the gap it fills.
+
+| Role | Purpose | Why needed (gap it covers) |
+|------|---------|----------------------------|
+| `roles/viewer` | Read-only access to all resources, project-level IAM policies, recommender insights, policy analyzer | Base read access — but cannot navigate folder/org hierarchy, read folder/org IAM policies, access data access logs, or search assets across projects |
+| `roles/browser` | Navigate organization, folder, and project hierarchy | `roles/viewer` cannot list folders (`folders.get`, `folders.list`) or view organization metadata (`organizations.get`). Required for hierarchy traversal in scripts |
+| `roles/iam.securityReviewer` | Read IAM policies at folder and organization levels | `roles/viewer` only includes `projects.getIamPolicy` — it does **not** include `folders.getIamPolicy` or `organizations.getIamPolicy`. Without this, IAM role grants at folder or org level are invisible for all identities |
+| `roles/cloudasset.viewer` | Bulk search IAM bindings and resources across the org | No other role provides cross-project IAM search. Required to discover where an identity (user, group, SA) has access beyond a single project — single API call returns all bindings org-wide |
+| `roles/logging.privateLogViewer` | Read Data Access Logs and filtered log views | `roles/viewer` includes basic log reads but **not** data access audit logs (which record who accessed what data) |
+| `roles/serviceusage.serviceUsageConsumer` | View enabled APIs and service usage quotas | `roles/viewer` does not include service usage permissions |
+
+### Organization-Level Onboarding
+
+Covers all GCP projects (existing and future) through IAM inheritance. Sections 2.2 and 2.3 are not applicable.
+
+| Role | Purpose |
+|------|---------|
+| `roles/viewer` | Read-only access to all resources and project-level IAM policies |
+| `roles/browser` | Navigate organization, folder, and project hierarchy |
+| `roles/iam.securityReviewer` | Read IAM policies at organization, folder, and project levels |
+| `roles/cloudasset.viewer` | Search IAM bindings and resources across all projects |
+| `roles/logging.privateLogViewer` | Access Data Access Logs and filtered log views |
+| `roles/serviceusage.serviceUsageConsumer` | View enabled APIs and service usage quotas |
+
+### Folder-Level Onboarding
+
+Applies when the customer decides not to onboard their entire GCP Organization. All projects within the specified folders are covered.
+
+| Role | Purpose |
+|------|---------|
+| `roles/viewer` | Read-only access to all resources and project-level IAM policies |
+| `roles/browser` | Navigate folder and project hierarchy |
+| `roles/iam.securityReviewer` | Read IAM policies at folder and project levels |
+| `roles/cloudasset.viewer` | Search IAM bindings and resources across folder scope |
+| `roles/logging.privateLogViewer` | Access Data Access Logs and filtered log views |
+| `roles/serviceusage.serviceUsageConsumer` | View enabled APIs and service usage quotas |
+
+### Project-Level Onboarding
+
+| Role | Purpose |
+|------|---------|
+| `roles/viewer` | Read-only access to all resources and project-level IAM policies |
+| `roles/logging.privateLogViewer` | Access Data Access Logs and filtered log views |
+| `roles/serviceusage.serviceUsageConsumer` | View enabled APIs and service usage quotas |
+
+**Note:** Project-level onboarding does not include `roles/browser`, `roles/iam.securityReviewer`, or `roles/cloudasset.viewer` because these capabilities require a higher scope (folder or organization) to be effective.
+
+---
+
+## 3. Scope-Level Capabilities
+
+IAM roles are evaluated at the scope where they are granted. A role granted at project level cannot inspect resources at folder or organization levels.
+
+| Capability | Project scope | Folder scope | Organization scope |
+|------------|---------------|--------------|---------------------|
+| Resource reads (Compute, Storage, IAM, etc.) | Project only | All projects in folder | All projects in org |
+| Project IAM policy reads | Yes | Yes (inherited) | Yes (inherited) |
+| Folder IAM policy reads | No | Yes | Yes |
+| Organization IAM policy reads | No | No | Yes |
+| Hierarchy navigation (folders, org) | No | Folder scope | Full org |
+| Cross-project IAM binding search | No | Folder scope | Full org |
+| Data access audit logs | Project only | All projects in folder | All projects in org |
+| Deny policies, PAB, recommender insights | Project only | Folder scope | Full org |
+
+---
+
+## 4. Required APIs
+
+The following GCP APIs must be enabled on each project in scope:
+
+| API | Purpose |
+|-----|---------|
+| Cloud Resource Manager API | Project/folder/org hierarchy traversal |
+| IAM API | Role and permission analysis |
+| Cloud Asset API | Cross-project IAM and resource search |
+| Recommender API | IAM policy recommendations and insights |
+| Policy Analyzer API | Permission usage activity analysis |
+| Cloud Logging API | Audit log access |
+
+---
+
+## 5. Custom Roles (Fallback)
+
+### Custom Logs Viewer
+
+If `roles/logging.privateLogViewer` cannot be assigned, Tamnoon recommends creating the following custom role at the onboarding scope:
 
 | Permission | Purpose |
 |------------|---------|
@@ -88,28 +150,14 @@ Should `roles/logging.privateLogViewer` not be assigned, Tamnoon recommends crea
 | `logging.locations.list` | Enumerate available log storage regions |
 | `resourcemanager.projects.get` | Read project metadata for log correlation |
 
-**Note:** `observability.scopes.get` is already included in `roles/viewer` and does not need to be added to the custom role.
+`observability.scopes.get` is already included in `roles/viewer` and does not need to be added.
 
 ---
 
-## API Requirements
+## 6. Summary
 
-The following GCP APIs must be enabled for full functionality:
-
-| API | Purpose |
-|-----|---------|
-| Cloud Resource Manager API | Project/folder/org hierarchy traversal |
-| IAM API | Role and permission analysis |
-| Recommender API | IAM policy recommendations and insights |
-| Policy Analyzer API | Permission usage activity analysis |
-| Cloud Logging API | Audit log access |
-
----
-
-## Summary
-
-| Scope | Required Roles | IAM Investigation Capability |
-|-------|----------------|------------------------------|
-| Organization | `roles/viewer`, `roles/iam.securityReviewer`, `roles/logging.privateLogViewer`, `roles/resourcemanager.organizationViewer`, `roles/serviceusage.serviceUsageConsumer` | Full - deny policies, PAB, recommender insights, IAM policy visibility across org/folder/project |
-| Folder | `roles/viewer`, `roles/iam.securityReviewer`, `roles/logging.privateLogViewer`, `roles/resourcemanager.folderViewer`, `roles/serviceusage.serviceUsageConsumer` | Partial - folder and project level IAM policy visibility, deny policies, PAB |
-| Project | `roles/viewer`, `roles/logging.privateLogViewer`, `roles/serviceusage.serviceUsageConsumer` | Limited - project level only (no folder/org IAM policy visibility) |
+| Scope | Roles | Coverage |
+|-------|-------|----------|
+| **Organization** | `roles/viewer`, `roles/browser`, `roles/iam.securityReviewer`, `roles/cloudasset.viewer`, `roles/logging.privateLogViewer`, `roles/serviceusage.serviceUsageConsumer` | Full — all resources, IAM policies at all levels, cross-project search, hierarchy navigation, data access logs |
+| **Folder** | `roles/viewer`, `roles/browser`, `roles/iam.securityReviewer`, `roles/cloudasset.viewer`, `roles/logging.privateLogViewer`, `roles/serviceusage.serviceUsageConsumer` | Partial — folder and contained projects only |
+| **Project** | `roles/viewer`, `roles/logging.privateLogViewer`, `roles/serviceusage.serviceUsageConsumer` | Limited — single project, no hierarchy or cross-project visibility |

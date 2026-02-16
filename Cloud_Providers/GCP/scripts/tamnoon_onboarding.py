@@ -5,11 +5,11 @@ Tamnoon GCP Onboarding - Permission Assignment Script
 Run in Google Cloud Shell to assign required Tamnoon permissions.
 
 Usage:
-    python3 poc_onboarding.py                              # Interactive mode
-    python3 poc_onboarding.py --help                       # Show help
-    python3 poc_onboarding.py --scope organization --org-id 123456789
-    python3 poc_onboarding.py --scope folder --folder-ids 111 222 333
-    python3 poc_onboarding.py --scope project --project-ids proj-a proj-b -y
+    python3 tamnoon_onboarding.py                              # Interactive mode
+    python3 tamnoon_onboarding.py --help                       # Show help
+    python3 tamnoon_onboarding.py --scope organization --org-id 123456789
+    python3 tamnoon_onboarding.py --scope folder --folder-ids 111 222 333
+    python3 tamnoon_onboarding.py --scope project --project-ids proj-a proj-b -y
 """
 
 import argparse
@@ -22,15 +22,19 @@ import sys
 # =============================================================================
 
 ORG_ROLES = [
-    "roles/resourcemanager.organizationViewer",
     "roles/viewer",
+    "roles/browser",
+    "roles/iam.securityReviewer",
+    "roles/cloudasset.viewer",
     "roles/logging.privateLogViewer",
     "roles/serviceusage.serviceUsageConsumer",
 ]
 
 FOLDER_ROLES = [
-    "roles/resourcemanager.folderViewer",
     "roles/viewer",
+    "roles/browser",
+    "roles/iam.securityReviewer",
+    "roles/cloudasset.viewer",
     "roles/logging.privateLogViewer",
     "roles/serviceusage.serviceUsageConsumer",
 ]
@@ -241,7 +245,6 @@ def print_summary(scope_type, results_by_resource):
     print("\n" + "=" * 64)
 
     total_resources = len(results_by_resource)
-    all_success = all(r["failed"] == 0 for r in results_by_resource.values())
 
     if total_resources == 1:
         resource_id = list(results_by_resource.keys())[0]
@@ -282,7 +285,7 @@ def interactive_mode():
 
     # 1. Select scope
     print("\nSelect scope:")
-    print("  1. Organization")
+    print("  1. Organization (recommended)")
     print("  2. Folder")
     print("  3. Project")
 
@@ -399,10 +402,10 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  python3 poc_onboarding.py
-  python3 poc_onboarding.py --scope organization --org-id 123456789
-  python3 poc_onboarding.py --scope folder --folder-ids 111 222 333
-  python3 poc_onboarding.py --scope project --project-ids proj-a proj-b -y
+  python3 tamnoon_onboarding.py
+  python3 tamnoon_onboarding.py --scope organization --org-id 123456789
+  python3 tamnoon_onboarding.py --scope folder --folder-ids 111 222 333
+  python3 tamnoon_onboarding.py --scope project --project-ids proj-a proj-b -y
         """
     )
 
