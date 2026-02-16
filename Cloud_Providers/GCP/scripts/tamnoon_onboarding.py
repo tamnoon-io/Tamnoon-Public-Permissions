@@ -10,9 +10,11 @@ Usage:
     python3 tamnoon_onboarding.py --scope organization --org-id 123456789
     python3 tamnoon_onboarding.py --scope folder --folder-ids 111 222 333
     python3 tamnoon_onboarding.py --scope project --project-ids proj-a proj-b -y
+    python3 tamnoon_onboarding.py --scope project --project-ids proj-a --enable-apis
 """
 
 import argparse
+import json
 import re
 import subprocess
 import sys
@@ -45,13 +47,41 @@ PROJECT_ROLES = [
     "roles/serviceusage.serviceUsageConsumer",
 ]
 
+# =============================================================================
+# Required APIs (enabled per-project)
+# =============================================================================
+
+REQUIRED_APIS = [
+    # Core
+    "cloudresourcemanager.googleapis.com",
+    "iam.googleapis.com",
+    "logging.googleapis.com",
+    "cloudasset.googleapis.com",
+    "policyanalyzer.googleapis.com",
+    "recommender.googleapis.com",
+    "serviceusage.googleapis.com",
+    # Compute & Networking
+    "compute.googleapis.com",
+    # Serverless
+    "run.googleapis.com",
+    "cloudfunctions.googleapis.com",
+    "eventarc.googleapis.com",
+    "pubsub.googleapis.com",
+    "apigateway.googleapis.com",
+    # Data & Storage
+    "bigquery.googleapis.com",
+    "storage-api.googleapis.com",
+    "sqladmin.googleapis.com",
+    "secretmanager.googleapis.com",
+]
+
 DEFAULT_MEMBER = "tamnoonpoc@tamnoon.io"
 
 # =============================================================================
 # Helper Functions
 # =============================================================================
 
-def run_gcloud(args_list):
+def run_gcloud(args_list, timeout=60):
     """Execute gcloud command and return (success, output, error)."""
     cmd = ["gcloud"] + args_list
     try:
@@ -59,7 +89,7 @@ def run_gcloud(args_list):
             cmd,
             capture_output=True,
             text=True,
-            timeout=60
+            timeout=timeout
         )
         if result.returncode == 0:
             return True, result.stdout.strip(), None
@@ -82,7 +112,6 @@ def check_gcloud_auth():
 
 def parse_resource_ids(input_str):
     """Parse comma or space separated resource IDs."""
-    # Handle: "id1, id2, id3" or "id1 id2 id3" or "id1,id2,id3"
     input_str = input_str.replace(",", " ")
     return [rid.strip() for rid in input_str.split() if rid.strip()]
 
@@ -120,8 +149,6 @@ def validate_folder_id(folder_id):
 
 def validate_project_id(project_id):
     """Validate project ID format. Returns (is_valid, error_message)."""
-    # GCP project IDs: 6-30 chars, lowercase letters, digits, hyphens
-    # Must start with a letter, cannot end with hyphen
     pattern = r'^[a-z][a-z0-9-]{4,28}[a-z0-9]$'
     if re.match(pattern, project_id):
         return True, None
@@ -146,6 +173,179 @@ def validate_resources(scope_type, resources):
             errors.append(error)
 
     return len(errors) == 0, errors
+
+
+# =============================================================================
+# Project Discovery Functions
+# =============================================================================
+
+def discover_projects_in_org(org_id):
+    """List all active projects in the organization."""
+    print(f"\nDiscovering projects in organization {org_id}...")
+    success, output, error = run_gcloud([
+        "projects", "list",
+        "--filter=lifecycleState:ACTIVE",
+        "--format=value(projectId)",
+    ], timeout=120)
+
+    if not success:
+        print(f"  Failed to list projects: {error}")
+        return []
+
+    projects = [p for p in output.split('\n') if p.strip()]
+    print(f"  Found {len(projects)} active project(s)")
+    return projects
+
+
+def discover_projects_in_folders(folder_ids):
+    """Recursively list all active projects under folder(s)."""
+    all_projects = []
+    visited_folders = set()
+
+    def _recurse(folder_id):
+        if folder_id in visited_folders:
+            return
+        visited_folders.add(folder_id)
+
+        # Direct child projects
+        success, output, error = run_gcloud([
+            "projects", "list",
+            f"--filter=parent.id={folder_id} AND lifecycleState:ACTIVE",
+            "--format=value(projectId)",
+        ], timeout=120)
+
+        if success and output:
+            projects = [p for p in output.split('\n') if p.strip()]
+            all_projects.extend(projects)
+
+        # Child folders — recurse
+        success, output, error = run_gcloud([
+            "resource-manager", "folders", "list",
+            f"--folder={folder_id}",
+            "--format=value(name)",
+        ], timeout=60)
+
+        if success and output:
+            for child in output.split('\n'):
+                child = child.strip()
+                if child:
+                    child_id = child.replace("folders/", "")
+                    _recurse(child_id)
+
+    print(f"\nDiscovering projects in {len(folder_ids)} folder(s)...")
+    for folder_id in folder_ids:
+        _recurse(folder_id)
+
+    # Deduplicate (a project could appear via multiple paths)
+    all_projects = list(dict.fromkeys(all_projects))
+    print(f"  Found {len(all_projects)} active project(s)")
+    return all_projects
+
+
+# =============================================================================
+# API Enablement Functions
+# =============================================================================
+
+def enable_apis_on_project(project_id, apis, project_index=None, total_projects=None):
+    """Enable APIs on a single project. Returns results dict."""
+    results = {"success": 0, "failed": 0, "errors": []}
+
+    prefix = ""
+    if project_index is not None and total_projects is not None:
+        prefix = f"[{project_index}/{total_projects}] "
+
+    print(f"\n{prefix}Enabling APIs on project {project_id}...")
+
+    for api in apis:
+        # gcloud services enable is idempotent — safe to re-run
+        success, output, error = run_gcloud([
+            "services", "enable", api,
+            f"--project={project_id}",
+            "--quiet",
+        ], timeout=120)
+
+        if success:
+            print(f"  \u2713 {api}")
+            results["success"] += 1
+        else:
+            print(f"  \u2717 {api} ({error})")
+            results["failed"] += 1
+            results["errors"].append({"api": api, "error": error})
+
+    return results
+
+
+def run_enable_apis(scope_type, resources, auto_approve=False):
+    """Discover projects and enable APIs. Returns exit code."""
+    # Discover projects based on scope
+    if scope_type == "project":
+        projects = resources
+    elif scope_type == "organization":
+        projects = discover_projects_in_org(resources[0])
+    elif scope_type == "folder":
+        projects = discover_projects_in_folders(resources)
+    else:
+        print(f"Unknown scope: {scope_type}")
+        return 1
+
+    if not projects:
+        print("No projects found. Cannot enable APIs.")
+        return 1
+
+    # Show plan
+    print(f"\nAPIs to enable ({len(REQUIRED_APIS)}):")
+    for api in REQUIRED_APIS:
+        print(f"  - {api}")
+
+    print(f"\nTarget projects ({len(projects)}):")
+    for project_id in projects:
+        print(f"  - {project_id}")
+
+    print(f"\nTotal operations: {len(REQUIRED_APIS)} APIs x {len(projects)} projects = {len(REQUIRED_APIS) * len(projects)}")
+
+    if not auto_approve:
+        if not prompt_confirmation():
+            print("Cancelled.")
+            return 1
+
+    # Enable APIs on each project
+    results_by_project = {}
+    total = len(projects)
+
+    for i, project_id in enumerate(projects, 1):
+        index = i if total > 1 else None
+        total_count = total if total > 1 else None
+        results = enable_apis_on_project(project_id, REQUIRED_APIS, index, total_count)
+        results_by_project[project_id] = results
+
+    # Summary
+    print("\n" + "=" * 64)
+    print("API ENABLEMENT SUMMARY")
+
+    total_success = sum(r["success"] for r in results_by_project.values())
+    total_failed = sum(r["failed"] for r in results_by_project.values())
+    total_ops = total_success + total_failed
+
+    if len(projects) == 1:
+        project_id = projects[0]
+        result = results_by_project[project_id]
+        if result["failed"] == 0:
+            print(f"SUCCESS: {result['success']}/{result['success'] + result['failed']} APIs enabled on {project_id}")
+        else:
+            print(f"PARTIAL: {result['success']}/{result['success'] + result['failed']} APIs enabled on {project_id} ({result['failed']} failed)")
+            for err in result["errors"]:
+                print(f"  {err['api']}: {err['error']}")
+    else:
+        print(f"{len(projects)} projects processed: {total_success}/{total_ops} API enablements succeeded")
+        for project_id, result in results_by_project.items():
+            if result["failed"] == 0:
+                print(f"  {project_id}: {result['success']}/{result['success'] + result['failed']} \u2713")
+            else:
+                print(f"  {project_id}: {result['success']}/{result['success'] + result['failed']} ({result['failed']} failed)")
+
+    print("=" * 64 + "\n")
+
+    return 1 if total_failed > 0 else 0
 
 
 # =============================================================================
@@ -176,7 +376,6 @@ def assign_roles_to_resource(scope_type, resource_id, member, roles, resource_in
     """Assign all roles to a single resource."""
     results = {"success": 0, "failed": 0, "errors": []}
 
-    # Progress prefix for multiple resources
     prefix = ""
     if resource_index is not None and total_resources is not None:
         prefix = f"[{resource_index}/{total_resources}] "
@@ -207,8 +406,8 @@ def print_header():
     print("=" * 64)
 
 
-def show_validation_summary(scope_type, resources, member, roles):
-    """Display planned actions and return confirmation."""
+def show_validation_summary(scope_type, resources, member, roles, enable_apis=False):
+    """Display planned actions."""
     print_header()
     print(f"\nScope:       {scope_type.capitalize()}")
 
@@ -227,6 +426,9 @@ def show_validation_summary(scope_type, resources, member, roles):
     for role in roles:
         print(f"  - {role}")
 
+    if enable_apis:
+        print(f"\nAPI enablement: Yes ({len(REQUIRED_APIS)} APIs per project)")
+
     return True
 
 
@@ -243,6 +445,7 @@ def prompt_confirmation():
 def print_summary(scope_type, results_by_resource):
     """Print final summary."""
     print("\n" + "=" * 64)
+    print("ROLE ASSIGNMENT SUMMARY")
 
     total_resources = len(results_by_resource)
 
@@ -264,6 +467,20 @@ def print_summary(scope_type, results_by_resource):
                 print(f"  {resource_id}: {result['success']}/{total} roles ({result['failed']} failed)")
 
     print("=" * 64 + "\n")
+
+
+def print_enable_apis_hint(scope_type, resources):
+    """Print hint about enabling APIs."""
+    print("To enable required GCP APIs on projects in scope, re-run with --enable-apis:")
+    if scope_type == "organization":
+        print(f"  python3 tamnoon_onboarding.py --scope organization --org-id {resources[0]} --enable-apis")
+    elif scope_type == "folder":
+        ids = " ".join(resources)
+        print(f"  python3 tamnoon_onboarding.py --scope folder --folder-ids {ids} --enable-apis")
+    elif scope_type == "project":
+        ids = " ".join(resources)
+        print(f"  python3 tamnoon_onboarding.py --scope project --project-ids {ids} --enable-apis")
+    print()
 
 
 # =============================================================================
@@ -328,7 +545,6 @@ def interactive_mode():
         print("No valid resource IDs provided.")
         return 1
 
-    # Organization only supports single ID
     if scope_type == "organization" and len(resources) > 1:
         print("Organization scope only supports a single organization ID.")
         resources = [resources[0]]
@@ -350,7 +566,6 @@ def interactive_mode():
 
     member_email = member_input if member_input else DEFAULT_MEMBER
 
-    # Validate email
     valid, error = validate_email(member_email)
     if not valid:
         print(f"\n{error}")
@@ -373,7 +588,7 @@ def interactive_mode():
         print("Cancelled.")
         return 1
 
-    # 6. Execute
+    # 6. Execute role assignment
     results_by_resource = {}
     total = len(resources)
 
@@ -383,10 +598,11 @@ def interactive_mode():
         results = assign_roles_to_resource(scope_type, resource_id, member, roles, index, total_count)
         results_by_resource[resource_id] = results
 
-    # 7. Print summary
     print_summary(scope_type, results_by_resource)
 
-    # Return non-zero if any failures
+    # 7. Hint about API enablement
+    print_enable_apis_hint(scope_type, resources)
+
     if any(r["failed"] > 0 for r in results_by_resource.values()):
         return 1
     return 0
@@ -398,7 +614,7 @@ def interactive_mode():
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Tamnoon GCP Onboarding - Assign required permissions",
+        description="Tamnoon GCP Onboarding - Assign required permissions and enable APIs",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
@@ -406,6 +622,8 @@ Examples:
   python3 tamnoon_onboarding.py --scope organization --org-id 123456789
   python3 tamnoon_onboarding.py --scope folder --folder-ids 111 222 333
   python3 tamnoon_onboarding.py --scope project --project-ids proj-a proj-b -y
+  python3 tamnoon_onboarding.py --scope project --project-ids proj-a --enable-apis
+  python3 tamnoon_onboarding.py --scope organization --org-id 123456789 --enable-apis -y
         """
     )
 
@@ -421,6 +639,8 @@ Examples:
                         help=f"Member email (default: {DEFAULT_MEMBER})")
     parser.add_argument("--member-type", choices=["user", "serviceAccount"], default="user",
                         help="Member type (default: user)")
+    parser.add_argument("--enable-apis", action="store_true",
+                        help="Enable required GCP APIs on projects in scope")
     parser.add_argument("--yes", "-y", action="store_true",
                         help="Skip confirmation prompt (auto-approve)")
 
@@ -471,7 +691,7 @@ Examples:
         return 1
 
     # Show validation summary
-    show_validation_summary(args.scope, resources, member, roles)
+    show_validation_summary(args.scope, resources, member, roles, enable_apis=args.enable_apis)
 
     # Confirm unless --yes
     if not args.yes:
@@ -479,7 +699,7 @@ Examples:
             print("Cancelled.")
             return 1
 
-    # Execute
+    # Execute role assignment
     results_by_resource = {}
     total = len(resources)
 
@@ -489,13 +709,17 @@ Examples:
         results = assign_roles_to_resource(args.scope, resource_id, member, roles, index, total_count)
         results_by_resource[resource_id] = results
 
-    # Print summary
     print_summary(args.scope, results_by_resource)
 
-    # Return non-zero if any failures
-    if any(r["failed"] > 0 for r in results_by_resource.values()):
-        return 1
-    return 0
+    role_failed = any(r["failed"] > 0 for r in results_by_resource.values())
+
+    # Execute API enablement if requested
+    if args.enable_apis:
+        api_exit = run_enable_apis(args.scope, resources, auto_approve=args.yes)
+        return 1 if (role_failed or api_exit != 0) else 0
+    else:
+        print_enable_apis_hint(args.scope, resources)
+        return 1 if role_failed else 0
 
 
 if __name__ == "__main__":
