@@ -1,4 +1,4 @@
-<img src="images/Tamnoon.png" width="470">
+<img src="images/Tamnoon.png" width="470">&nbsp;&nbsp;&nbsp;<img src="images/GoogleWorkspace.png" width="470">
 
 # Google Workspace Integration
 
