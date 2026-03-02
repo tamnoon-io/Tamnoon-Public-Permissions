@@ -4,7 +4,7 @@
 
 Enriches GCP IAM investigations with identity context from Google Workspace / Cloud Identity. This is an **optional** integration — GCP IAM investigations work without it, but Workspace data fills critical gaps when investigating user and group principals.
 
-> **Requires Service Account Principal**: Domain-wide delegation only works with `google.oauth2.service_account.Credentials` (not user credentials). The current Tamnoon user principal (`tamnoonpoc@tamnoon.io`) cannot perform Workspace queries. This integration becomes available when Tamnoon transitions to a service account principal with workload identity federation.
+> **Requires Service Account Principal**: Domain-wide delegation only works with `google.oauth2.service_account.Credentials` (not user credentials). When running via workload identity federation or as a service account, the scripts automatically detect the org domain and impersonate `tamnoon-workspace-reader@{customer-domain}`.
 
 ---
 
@@ -52,19 +52,22 @@ Domain-wide delegation allows the Tamnoon service account to call Workspace Admi
 
 6. Click **Authorize**
 
-### Step 3: Designate an Impersonation Target User
+### Step 3: Create the Impersonation Target User
 
 The Tamnoon SA impersonates a Workspace user when calling Admin SDK. This user must have sufficient admin privileges to read the requested data.
 
-**Recommended**: Create a dedicated service user (e.g., `tamnoon-reader@customer-domain.com`) with a **custom admin role** that has read-only access:
+**Convention**: Create a dedicated Workspace user named **`tamnoon-workspace-reader@{customer-domain}`** with a **custom admin role** that has read-only access:
 
 | Admin Console Privilege | Category |
 |------------------------|----------|
 | Users > Read | Organization Units |
 | Groups > Read | Groups |
-| Organizational Units > Read | Organization Units |
 
 This follows least-privilege — the impersonated user only has read access, matching the OAuth scopes.
+
+**Why this naming convention matters**: Tamnoon scripts automatically detect the impersonation target by resolving the GCP organization's primary domain (via `gcloud projects get-ancestors` → `gcloud organizations describe`) and constructing `tamnoon-workspace-reader@{domain}`. No manual configuration is needed when this convention is followed.
+
+**Manual override**: If the impersonation user has a different name, pass `--workspace-admin user@domain.com` to the script to override auto-detection.
 
 **Alternative**: Use an existing Super Admin account as the impersonation target. Simpler but grants broader access than needed.
 
@@ -78,11 +81,12 @@ All scopes are **read-only**. No write or management access is requested.
 |-------------|---------|
 | `https://www.googleapis.com/auth/admin.directory.user.readonly` | List and read user profiles (name, OU, status, last login) |
 | `https://www.googleapis.com/auth/admin.directory.group.readonly` | List groups and group memberships |
-| `https://www.googleapis.com/auth/admin.directory.orgunit.readonly` | Read organizational unit hierarchy |
+
+OU data (e.g., `orgUnitPath`) is included in user profile responses under the `user.readonly` scope — a separate `orgunit.readonly` scope is not required.
 
 **Comma-separated (for Admin Console paste):**
 ```
-https://www.googleapis.com/auth/admin.directory.user.readonly,https://www.googleapis.com/auth/admin.directory.group.readonly,https://www.googleapis.com/auth/admin.directory.orgunit.readonly
+https://www.googleapis.com/auth/admin.directory.user.readonly,https://www.googleapis.com/auth/admin.directory.group.readonly
 ```
 
 ---
@@ -167,21 +171,25 @@ GCP service accounts have a freeform `description` field that teams often use to
 ## 6. Authentication Flow
 
 ```
-Tamnoon SA                    Google Workspace
-    |                              |
-    |-- SignJwt (sub=admin@co) --> |
-    |   aud=oauth2.googleapis.com  |
-    |   scope=admin.directory.*    |
-    |                              |
-    |<-- Access Token ------------ |
-    |                              |
-    |-- Admin SDK API call ------> |
-    |   (Users, Groups, OUs)       |
-    |                              |
-    |<-- Identity Data ----------- |
+Tamnoon SA                                          Google Workspace
+    |                                                     |
+    |-- 1. Resolve org domain from project hierarchy      |
+    |   (gcloud projects get-ancestors → org describe)    |
+    |                                                     |
+    |-- 2. SignJwt ---------------------------------------->
+    |   sub=tamnoon-workspace-reader@{domain}             |
+    |   aud=oauth2.googleapis.com                         |
+    |   scope=admin.directory.user+group.readonly         |
+    |                                                     |
+    |<-- Access Token ------------------------------------ |
+    |                                                     |
+    |-- 3. Admin SDK API calls --------------------------> |
+    |   (users.get, members.list)                         |
+    |                                                     |
+    |<-- Identity Data ----------------------------------- |
 ```
 
-The SA uses its GCP credentials to sign a JWT with `sub` set to the designated impersonation target user. Google validates the domain-wide delegation grant and returns an access token scoped to the authorized OAuth scopes. The SA then calls Admin SDK APIs using this token.
+The SA resolves the GCP organization's primary domain from the project hierarchy, constructs `tamnoon-workspace-reader@{domain}`, and signs a JWT with `sub` set to that user. Google validates the domain-wide delegation grant and returns an access token scoped to the authorized OAuth scopes. The SA then calls Admin SDK APIs using this token.
 
 **Audit trail**: All Admin SDK calls appear in the Workspace Admin audit log under the impersonated user's identity, with the SA email visible in the delegated caller metadata.
 
@@ -192,9 +200,11 @@ The SA uses its GCP credentials to sign a JWT with `sub` set to the designated i
 | Component | Requirement | Owner |
 |-----------|-------------|-------|
 | Admin SDK API enabled | `admin.googleapis.com` on a GCP project in the org | Workspace Admin |
-| Domain-wide delegation | SA Client ID + OAuth scopes registered in Admin Console | Workspace Admin |
-| Impersonation target user | Workspace user with read-only admin role | Workspace Admin |
+| Domain-wide delegation | SA Client ID + 2 OAuth scopes registered in Admin Console | Workspace Admin |
+| Impersonation target user | `tamnoon-workspace-reader@{domain}` with read-only admin role | Workspace Admin |
 | Tamnoon SA Client ID | Provided during onboarding | Tamnoon |
 | SA `description` parsing | No additional permissions — uses existing `iam.googleapis.com` access | Already covered by `roles/viewer` |
 
 **Scope**: Workspace integration is **organization-wide** — once configured, it covers all users and groups in the Workspace domain. There is no per-project or per-folder scoping for Workspace data.
+
+**Auto-detection**: Scripts resolve the org domain from any target project and construct the impersonation target as `tamnoon-workspace-reader@{domain}`. Override with `--workspace-admin` if a different user is used.
