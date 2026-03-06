@@ -7,176 +7,181 @@ Tamnoon supports two onboarding methods:
 
 | Method | Description | Identity Type |
 |--------|-------------|---------------|
+| **Platform Onboarding (Bicep Template)** | Automated access via federated credentials | App Registration + Service Principal |
 | **Human Onboarding (CloudPro)** | Tamnoon engineer accesses Azure directly | Entra ID User |
-| **Platform Onboarding (ARM Template)** | Automated access via federated credentials | App Registration + Service Principal |
 
 Both methods use the **same operational permissions** described in Part A below.
 
-================================================================================
-# PART A: OPERATIONAL PERMISSIONS
-================================================================================
+---
+
+# Part A: Operational Permissions
 
 These permissions are granted to the Tamnoon identity (user or service principal)
 for investigation and remediation workflows.
 
---------------------------------------------------------------------------------
-## 1. Azure Built-in Roles (Required)
---------------------------------------------------------------------------------
+## Required Roles
 
-Assign these roles at the Management Group or Subscription level.
+| # | Role | Type | Scope | Purpose |
+|---|------|------|-------|---------|
+| 1 | [Reader](https://learn.microsoft.com/en-us/azure/role-based-access-control/built-in-roles/general#reader) | Azure RBAC | Mgmt Group / Subscription | Read-only access to all resource configurations |
+| 2 | [Storage Blob Data Reader](https://learn.microsoft.com/en-us/azure/role-based-access-control/built-in-roles/storage#storage-blob-data-reader) | Azure RBAC | Mgmt Group / Subscription | Read diagnostic logs in blob containers |
+| 3 | [Log Analytics Reader](https://learn.microsoft.com/en-us/azure/azure-monitor/logs/manage-access?tabs=portal#log-analytics-reader) | Azure RBAC | Mgmt Group / Subscription | Query Azure Monitor Logs and Log Analytics Workspaces |
+| 4 | [**Directory Readers**](https://learn.microsoft.com/en-us/entra/identity/role-based-access-control/permissions-reference#directory-readers) | **Entra ID** | Tenant | Resolve principal GUIDs to display names |
 
-  - **Reader**
-    Read-only access to all Azure resource configurations.
+> **Why Directory Readers?** Without this role, callers in data plane logs appear as opaque GUIDs — identity context is missing from all findings. This role grants read access to users, groups, service principals, and applications in Microsoft Entra ID, enabling Tamnoon to map every principal UUID to a human-readable name during access pattern analysis (Storage, Key Vault, SQL Server, etc.).
 
-    Docs: https://learn.microsoft.com/en-us/azure/role-based-access-control/built-in-roles/general#reader
+## Custom Role — Deeper Investigation
 
-  - **Storage Blob Data Reader**
-    Read-only access to blob data. Required for reading diagnostic logs stored
-    in blob containers (e.g., `insights-logs-auditevent`). Does NOT grant storage
-    key access (least-privilege approach).
+Some investigation workflows require more granular permissions than the built-in roles provide.
+This custom role enables deeper capabilities and is **optional** for both onboarding methods.
 
-    Docs: https://learn.microsoft.com/en-us/azure/role-based-access-control/built-in-roles/storage#storage-blob-data-reader
+| Permission | Service | Investigation Use Case |
+|-----------|---------|----------------------|
+| `Microsoft.OperationalInsights/workspaces/analytics/query/action` | Log Analytics | KQL queries for access pattern analysis and security event correlation |
+| `Microsoft.OperationalInsights/workspaces/search/action` | Log Analytics | Search within Log Analytics workspace data |
+| `Microsoft.Storage/storageAccounts/listKeys/action` | Storage | Container, file share, queue, and table security analysis |
+| `Microsoft.Storage/storageAccounts/listServiceSas/action` | Storage | SAS token policy and delegation audit |
+| `Microsoft.Web/sites/config/list/action` | App Service | Connection strings and app settings exposure analysis |
+| `Microsoft.Web/sites/functions/listkeys/action` | Azure Functions | Function-level key access for secrets exposure audit |
+| `Microsoft.Web/sites/host/listkeys/action` | Azure Functions | Host-level key access for secrets exposure audit |
+| `Microsoft.KeyVault/vaults/secrets/getSecret/action` | Key Vault | Secret value retrieval for rotation and exposure validation |
+| `Microsoft.KeyVault/vaults/secrets/readMetadata/action` | Key Vault | Secret metadata (expiry, enabled state) without value access |
+| `Microsoft.KeyVault/vaults/keys/read` | Key Vault | Key metadata for cryptographic posture review |
+| `Microsoft.KeyVault/vaults/certificates/read` | Key Vault | Certificate metadata for expiry and binding review |
+| `Microsoft.ContainerRegistry/registries/listCredentials/action` | Container Registry | Admin credential audit for registry access posture |
+| `Microsoft.EventHub/namespaces/authorizationRules/listKeys/action` | Event Hub | Connection string access for log streaming analysis |
+| `Microsoft.DocumentDB/databaseAccounts/listKeys/action` | Cosmos DB | Account key access for data plane security review |
+| `Microsoft.DocumentDB/databaseAccounts/listConnectionStrings/action` | Cosmos DB | Connection string audit for secrets exposure |
 
-  - **Log Analytics Reader**
-    Read-only access to Azure Monitor Logs and Log Analytics Workspaces.
-    Required for audit log access, NSG flow log review, and diagnostics analysis.
+### Assignable Scopes
 
-    Docs: https://learn.microsoft.com/en-us/azure/azure-monitor/logs/manage-access?tabs=portal#log-analytics-reader
+- `/subscriptions/<subscription-id>`
+- `/providers/Microsoft.Management/managementGroups/<management-group-id>`
 
---------------------------------------------------------------------------------
-## 2. Microsoft Entra ID Directory Roles (Required)
---------------------------------------------------------------------------------
+### Role Definition — Subscription Scope
 
-Required for resolving principal UUIDs/GUIDs to human-readable names when
-analyzing data plane logs and identifying callers against Azure resources
-(e.g., Access Patterns analysis for Storage, Key Vault, SQL Server).
+```jsonc
+{
+  "Name": "Tamnoon Custom Role",
+  "IsCustom": true,
+  "Description": "Tamnoon Custom Role Permissions (subscription scope).",
+  "Actions": [
+    "Microsoft.OperationalInsights/workspaces/analytics/query/action",
+    "Microsoft.OperationalInsights/workspaces/search/action",
+    "Microsoft.Storage/storageAccounts/listKeys/action",
+    "Microsoft.Storage/storageAccounts/listServiceSas/action",
+    "Microsoft.Web/sites/config/list/action",
+    "Microsoft.Web/sites/functions/listkeys/action",
+    "Microsoft.Web/sites/host/listkeys/action",
+    "Microsoft.KeyVault/vaults/secrets/getSecret/action",
+    "Microsoft.KeyVault/vaults/secrets/readMetadata/action",
+    "Microsoft.KeyVault/vaults/keys/read",
+    "Microsoft.KeyVault/vaults/certificates/read",
+    "Microsoft.ContainerRegistry/registries/listCredentials/action",
+    "Microsoft.EventHub/namespaces/authorizationRules/listKeys/action",
+    "Microsoft.DocumentDB/databaseAccounts/listKeys/action",
+    "Microsoft.DocumentDB/databaseAccounts/listConnectionStrings/action"
+  ],
+  "NotActions": [],
+  "DataActions": [],
+  "NotDataActions": [],
+  "AssignableScopes": [
+    "/subscriptions/<subscription-id>"
+  ]
+}
+```
 
-  - **Directory Readers** (Minimum)
-    Grants read access to users, groups, service principals, and applications.
+### Role Definition — Management Group Scope
 
-    Docs: https://learn.microsoft.com/en-us/entra/identity/role-based-access-control/permissions-reference#directory-readers
-
-  - **Global Reader** (Preferred)
-    Grants full read-only access to all directory objects including policies.
-
-    Docs: https://learn.microsoft.com/en-us/entra/identity/role-based-access-control/permissions-reference#global-reader
-
---------------------------------------------------------------------------------
-## 3. Custom Role (Add-on for Deeper Investigation)
---------------------------------------------------------------------------------
-
-Some workflows require more granular permissions than built-in roles provide.
-This custom role enables deeper investigation capabilities and is **optional**
-for both onboarding methods.
-
-**Log Analytics (Query & Search)**
-- `Microsoft.OperationalInsights/workspaces/analytics/query/action`
-- `Microsoft.OperationalInsights/workspaces/search/action`
-
-**Storage Account (Key Access for Diagnostic Logs)**
-- `Microsoft.Storage/storageAccounts/listKeys/action`
-- `Microsoft.Storage/storageAccounts/listServiceSas/action`
-
-**App Service (Connection Strings & App Settings)**
-- `Microsoft.Web/sites/config/list/action`
-
-**Azure Functions (Function & Host Keys)**
-- `Microsoft.Web/sites/functions/listkeys/action`
-- `Microsoft.Web/sites/host/listkeys/action`
-
-**Key Vault (Data Plane - Secret/Key/Certificate Access)**
-- `Microsoft.KeyVault/vaults/secrets/getSecret/action`
-- `Microsoft.KeyVault/vaults/secrets/readMetadata/action`
-- `Microsoft.KeyVault/vaults/keys/read`
-- `Microsoft.KeyVault/vaults/certificates/read`
-
-**Container Registry (Admin Credential Audit)**
-- `Microsoft.ContainerRegistry/registries/listCredentials/action`
-
-**Event Hub (Connection String Access for Log Streaming)**
-- `Microsoft.EventHub/namespaces/authorizationRules/listKeys/action`
-
-**Cosmos DB (Key & Connection String Access)**
-- `Microsoft.DocumentDB/databaseAccounts/listKeys/action`
-- `Microsoft.DocumentDB/databaseAccounts/listConnectionStrings/action`
-
-**Assignable Scopes:**
-- `/subscriptions/<your-subscription-id>`
-- `/providers/Microsoft.Management/managementGroups/<your-mgmt-id>`
+```jsonc
+{
+  "Name": "Tamnoon Custom Role",
+  "IsCustom": true,
+  "Description": "Tamnoon Custom Role Permissions (management-group scope).",
+  "Actions": [
+    "Microsoft.OperationalInsights/workspaces/analytics/query/action",
+    "Microsoft.OperationalInsights/workspaces/search/action",
+    "Microsoft.Storage/storageAccounts/listKeys/action",
+    "Microsoft.Storage/storageAccounts/listServiceSas/action",
+    "Microsoft.Web/sites/config/list/action",
+    "Microsoft.Web/sites/functions/listkeys/action",
+    "Microsoft.Web/sites/host/listkeys/action",
+    "Microsoft.KeyVault/vaults/secrets/getSecret/action",
+    "Microsoft.KeyVault/vaults/secrets/readMetadata/action",
+    "Microsoft.KeyVault/vaults/keys/read",
+    "Microsoft.KeyVault/vaults/certificates/read",
+    "Microsoft.ContainerRegistry/registries/listCredentials/action",
+    "Microsoft.EventHub/namespaces/authorizationRules/listKeys/action",
+    "Microsoft.DocumentDB/databaseAccounts/listKeys/action",
+    "Microsoft.DocumentDB/databaseAccounts/listConnectionStrings/action"
+  ],
+  "NotActions": [],
+  "DataActions": [],
+  "NotDataActions": [],
+  "AssignableScopes": [
+    "/providers/Microsoft.Management/managementGroups/<management-group-id>"
+  ]
+}
+```
 
 This role should be maintained to reflect evolving API capabilities.
+See [azure-custom-role.md](azure-custom-role.md) for detailed permission specifications.
 
-================================================================================
-# PART B: ONBOARDING METHODS
-================================================================================
+---
 
---------------------------------------------------------------------------------
-## Method 1: Human Onboarding (CloudPro)
---------------------------------------------------------------------------------
+# Part B: Onboarding Methods
 
-A Tamnoon CloudPro engineer is granted direct access to your Azure environment
-using their Entra ID user account.
-
-**What You Need to Do:**
-
-1. Invite the Tamnoon user as a Guest in your Entra ID tenant (if external)
-2. Assign the Azure RBAC roles from Section 1 (Reader, Storage Blob Data Reader,
-   Log Analytics Reader) at the appropriate scope
-3. Assign the Entra ID Directory Role from Section 2 (Directory Readers or
-   Global Reader)
-4. (Optional) Assign the Custom Role from Section 3 for deeper investigation
-
-**No ARM template deployment required** - roles are assigned directly to the user.
-
---------------------------------------------------------------------------------
-## Method 2: Platform Onboarding (ARM Template)
---------------------------------------------------------------------------------
+## Method 1: Platform Onboarding (Bicep Template)
 
 The Tamnoon platform accesses your Azure environment using an App Registration
-with federated credentials (OIDC trust with AWS Cognito).
+with federated credentials (OIDC trust with AWS Cognito). This is the
+**recommended onboarding method**.
 
-**What the Template Creates:**
+### What the Template Creates
 
 | Resource | Description |
 |----------|-------------|
 | App Registration | `TamnoonFederationApp` in Entra ID |
 | Service Principal | Enterprise Application for the App Registration |
 | Federated Identity Credential | OIDC trust with AWS Cognito (`cognito-identity.amazonaws.com`) |
-| Role Assignments | Reader, Log Analytics Reader, Storage Blob Data Reader |
+| Role Assignments (RBAC) | Reader, Log Analytics Reader, Storage Blob Data Reader |
+| Role Assignment (Entra ID) | Directory Readers |
 
-**Template Deployment Scopes:**
+### Template Outputs
 
-| Template | Scope | Role Assignment Inheritance |
-|----------|-------|----------------------------|
-| Tenant-level | Root Management Group | All subscriptions in tenant |
-| Management Group | Target Management Group | All subscriptions under MG |
-| Subscription | Single Subscription | That subscription only |
+| Output | Description |
+|--------|-------------|
+| `tenantId` | Your Entra ID tenant ID |
+| `applicationId` | The App Registration (client) ID |
+| `servicePrincipalObjectId` | The Service Principal object ID — needed if assigning the Custom Role post-deployment |
+
+### Deployment Scopes
+
+The same Bicep template is available at each scope level — select the one that
+matches your desired role assignment inheritance:
+
+| Template Scope | Role Assignment Inheritance |
+|----------------|----------------------------|
+| Tenant (Root Management Group) | All subscriptions in tenant |
+| Management Group | All subscriptions under that MG |
+| Subscription | That subscription only |
 
 ### Deployer Permissions (One-Time Setup)
 
-The identity deploying the ARM template requires:
+The identity deploying the Bicep template requires:
 
-**Microsoft Entra ID (Minimum):**
+**Entra ID:**
 
-  - **Cloud Application Administrator**
-    - Creates App Registration
-    - Creates Service Principal
-    - Configures Federated Identity Credential
+| Role | Purpose |
+|------|---------|
+| [Cloud Application Administrator](https://learn.microsoft.com/en-us/entra/identity/role-based-access-control/permissions-reference#cloud-application-administrator) | Create App Registration, Service Principal, and Federated Identity Credential |
+| [Privileged Role Administrator](https://learn.microsoft.com/en-us/entra/identity/role-based-access-control/permissions-reference#privileged-role-administrator) (or Global Administrator) | Assign Directory Readers role to the Service Principal |
 
-    Docs: https://learn.microsoft.com/en-us/entra/identity/role-based-access-control/permissions-reference#cloud-application-administrator
+**Azure RBAC:**
 
-  - **Privileged Role Administrator** (or Global Administrator)
-    - Assigns Directory Readers role to the Service Principal
-
-    Docs: https://learn.microsoft.com/en-us/entra/identity/role-based-access-control/permissions-reference#privileged-role-administrator
-
-**Azure RBAC (Minimum):**
-
-  - **User Access Administrator** at the deployment scope
-    - Assigns Azure RBAC roles (Reader, Storage Blob Data Reader, Log Analytics Reader)
-      to the Tamnoon Service Principal
-
-    Docs: https://learn.microsoft.com/en-us/azure/role-based-access-control/built-in-roles#user-access-administrator
+| Role | Purpose |
+|------|---------|
+| [User Access Administrator](https://learn.microsoft.com/en-us/azure/role-based-access-control/built-in-roles#user-access-administrator) at deployment scope | Assign Azure RBAC roles to the Tamnoon Service Principal |
 
 ### Conditional Access Considerations
 
@@ -193,28 +198,39 @@ use one of these alternatives:
 
 ### Post-Deployment (Optional Add-on)
 
-After template deployment, you can optionally assign the Custom Role (Section 3)
+After template deployment, you can optionally assign the Custom Role
 to the `TamnoonFederationApp` Service Principal for deeper investigation capabilities.
+Use the `servicePrincipalObjectId` from the template outputs to target the assignment.
 
-================================================================================
-# SUMMARY
-================================================================================
+## Method 2: Human Onboarding (CloudPro)
 
---------------------------------------------------------------------------------
+A Tamnoon CloudPro engineer is granted direct access to your Azure environment
+using their Entra ID user account.
+
+**What you need to do:**
+
+1. Invite the Tamnoon user as a Guest in your Entra ID tenant (if external)
+2. Assign the three Azure RBAC roles (Reader, Storage Blob Data Reader, Log Analytics Reader) at the appropriate scope
+3. Assign the Entra ID role — [Directory Readers](https://learn.microsoft.com/en-us/entra/identity/role-based-access-control/permissions-reference#directory-readers)
+4. *(Optional)* Assign the Custom Role for deeper investigation
+
+No template deployment required — roles are assigned directly to the user.
+
+---
+
+# Summary
+
 ## Permissions Matrix
---------------------------------------------------------------------------------
 
-| Permission Type | Human (CloudPro) | Platform (ARM Template) |
-|-----------------|------------------|------------------------|
-| Reader | Assign to User | Auto-assigned by Template |
-| Storage Blob Data Reader | Assign to User | Auto-assigned by Template |
-| Log Analytics Reader | Assign to User | Auto-assigned by Template |
-| Directory Readers | Assign to User | Assign to Service Principal |
-| Custom Role (Add-on) | Assign to User | Assign to Service Principal |
+| Permission | Platform (Bicep Template) | Human (CloudPro) |
+|------------|--------------------------|-------------------|
+| Reader | Auto-assigned by Template | Assign to User |
+| Storage Blob Data Reader | Auto-assigned by Template | Assign to User |
+| Log Analytics Reader | Auto-assigned by Template | Assign to User |
+| Directory Readers | Auto-assigned by Template | Assign to User |
+| Custom Role (Add-on) | Assign to Service Principal | Assign to User |
 
---------------------------------------------------------------------------------
 ## Deployer Permissions (Platform Onboarding Only)
---------------------------------------------------------------------------------
 
 | Domain | Role | Purpose |
 |--------|------|---------|
@@ -222,21 +238,16 @@ to the `TamnoonFederationApp` Service Principal for deeper investigation capabil
 | Entra ID | Privileged Role Administrator | Assign Directory Readers to SPN |
 | Azure RBAC | User Access Administrator | Assign Azure RBAC roles at deployment scope |
 
---------------------------------------------------------------------------------
 ## Implementation Notes
---------------------------------------------------------------------------------
 
 - Assign roles at the narrowest applicable scope
 - Maintain audit trails using Azure Activity Logs
-- Keep custom role definitions up to date
+- Keep custom role definitions up to date — see [azure-custom-role.md](azure-custom-role.md)
 - Review role assignments periodically
 
---------------------------------------------------------------------------------
-## Support and Contact
---------------------------------------------------------------------------------
+## Support
 
-For help configuring access or assigning roles, please contact your Tamnoon
+For help configuring access or assigning roles, contact your Tamnoon
 CloudPros integration engineer.
 
-Maintained by: https://tamnoon.io
-Last Updated: January 12th, 2026
+Maintained by: [tamnoon.io](https://tamnoon.io)
