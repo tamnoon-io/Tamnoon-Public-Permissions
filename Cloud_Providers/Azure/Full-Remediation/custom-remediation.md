@@ -1,101 +1,135 @@
-# Tamnoon Azure Remediation Permissions
+# Tamnoon Azure Full-Remediation Permissions
 
-## Overview
+This document outlines the additional permissions required to enable Tamnoon remediation
+workflows — NSG rule management, secret rotation guidance, storage hardening, App Service
+access restrictions, and Entra ID hygiene.
 
-This document outlines the required permissions and role configurations for Azure Resource Manager remediation activities, including both Azure resource management and Entra ID permissions for CIEM (Cloud Infrastructure Entitlement Management) related alert remediation.
+> **Prerequisite:** Complete [Assisted-Remediation](../Assisted-Remediation/README.md) onboarding first. That deploys the Bicep template which creates the `TamnoonFederationApp` Service Principal with investigation-level permissions (Reader, Storage Blob Data Reader, Log Analytics Reader, Directory Readers). Full-Remediation builds on top of that foundation.
 
-## Azure Resource Manager Remediation
+---
 
-Choose one of the following options to configure the appropriate permissions for Azure resource remediation:
+## Azure Resource Remediation
 
-### Option 1: Built-in Roles (Recommended)
+Choose one of the following options to grant remediation permissions to the
+`TamnoonFederationApp` Service Principal.
 
-Deploy built-in roles at **Tenant/Management Groups/Subscriptions scope** using one of these configurations:
+### Option 1: Built-in Roles
 
-#### Primary Option (Preferred)
-- **Owner Role** - Provides maximum coverage for all Azure resources and operations
+Deploy built-in roles at Management Group or Subscription scope:
 
-#### Alternative Option
-- **Contributor Role** + **Security Admin Role** - Combines resource management with security-specific permissions
+| Configuration | Roles | Trade-off |
+|---------------|-------|-----------|
+| **Broad coverage** | [Contributor](https://learn.microsoft.com/en-us/azure/role-based-access-control/built-in-roles#contributor) + [User Access Administrator](https://learn.microsoft.com/en-us/azure/role-based-access-control/built-in-roles#user-access-administrator) | Fast setup, no maintenance — grants more permissions than currently used |
+| **Maximum coverage** | [Owner](https://learn.microsoft.com/en-us/azure/role-based-access-control/built-in-roles#owner) | Single role, full control — broadest blast radius |
 
-**Advantages of Option 1:**
-- Quick deployment using Azure's pre-configured roles
-- Comprehensive coverage across all Azure services
-- No maintenance required for role definitions
-- Microsoft-managed and regularly updated
+**When to use Option 1:**
+- Rapid onboarding where time-to-value matters more than permission granularity
+- Environments where Tamnoon is trusted with broad write access
+- No organizational requirement for custom role definitions
 
-### Option 2: Custom Role Configuration
+### Option 2: Custom Role (Recommended)
 
-For organizations requiring more granular control, implement a custom role that includes:
+A purpose-built role containing only the permissions Tamnoon remediation workflows
+actually require. This role **includes** the investigation permissions from
+[Assisted-Remediation](../Assisted-Remediation/README.md) so a single custom role
+covers both investigation and remediation.
 
-#### Base Permissions
-- **Reader Role** - Basic read access across Azure resources
-- **Log Analytics Reader Role** - Access to Log Analytics workspaces and queries
+#### Investigation Permissions (15)
 
-#### Extended Custom Role Permissions
-The custom role should include permissions for key Azure services (non-exhaustive list):
+These are the same as the Assisted-Remediation custom role — included here so
+a single role assignment covers both workflows.
 
-**Covered Azure Services:**
-- Virtual Machines
-- Storage Accounts
-- App Service
-- Network Security Groups
-- Container Registry
-- Log Analytics
-- Cosmos DB
-- Key Vault
+| Permission | Service | Use Case |
+|-----------|---------|----------|
+| `Microsoft.OperationalInsights/workspaces/analytics/query/action` | Log Analytics | KQL queries for access pattern analysis |
+| `Microsoft.OperationalInsights/workspaces/search/action` | Log Analytics | Workspace data search |
+| `Microsoft.Storage/storageAccounts/listKeys/action` | Storage | Container, share, queue, table analysis |
+| `Microsoft.Storage/storageAccounts/listServiceSas/action` | Storage | SAS token policy audit |
+| `Microsoft.Web/sites/config/list/action` | App Service | Connection strings and app settings |
+| `Microsoft.Web/sites/functions/listkeys/action` | Azure Functions | Function-level key audit |
+| `Microsoft.Web/sites/host/listkeys/action` | Azure Functions | Host-level key audit |
+| `Microsoft.KeyVault/vaults/secrets/getSecret/action` | Key Vault | Secret rotation validation |
+| `Microsoft.KeyVault/vaults/secrets/readMetadata/action` | Key Vault | Secret expiry and state |
+| `Microsoft.KeyVault/vaults/keys/read` | Key Vault | Cryptographic posture review |
+| `Microsoft.KeyVault/vaults/certificates/read` | Key Vault | Certificate expiry and binding |
+| `Microsoft.ContainerRegistry/registries/listCredentials/action` | Container Registry | Admin credential audit |
+| `Microsoft.EventHub/namespaces/authorizationRules/listKeys/action` | Event Hub | Log streaming analysis |
+| `Microsoft.DocumentDB/databaseAccounts/listKeys/action` | Cosmos DB | Data plane security review |
+| `Microsoft.DocumentDB/databaseAccounts/listConnectionStrings/action` | Cosmos DB | Connection string audit |
 
-**Implementation:**
-- Reference the attached JSON file for complete custom role definition
-- Deploy the custom role at appropriate scope (Tenant/Management Group/Subscription)
-- Assign the role to the remediation service principal or user account
+#### Remediation Permissions (16)
 
-**Note:** The provided JSON contains sufficient permissions to cover the key Azure services listed above, but may need expansion for additional services specific to your environment.
+| Permission | Service | Remediation Use Case |
+|-----------|---------|---------------------|
+| `Microsoft.Authorization/roleAssignments/write` | IAM | Create role assignments (managed identity setup) |
+| `Microsoft.Authorization/roleAssignments/delete` | IAM | Remove stale or unknown-object role assignments |
+| `Microsoft.Compute/virtualMachines/write` | Compute | Assign managed identity to VMs |
+| `Microsoft.Compute/virtualMachines/extensions/write` | Compute | Migrate VM extensions from SAS to managed identity |
+| `Microsoft.Network/networkSecurityGroups/securityRules/write` | Network | Patch overly permissive NSG rules |
+| `Microsoft.Network/networkSecurityGroups/securityRules/delete` | Network | Remove overly permissive NSG rules |
+| `Microsoft.Storage/storageAccounts/write` | Storage | Disable shared key, set SAS policy, restrict network access |
+| `Microsoft.Storage/storageAccounts/regenerateKey/action` | Storage | Rotate keys after secret exposure |
+| `Microsoft.Storage/storageAccounts/blobServices/containers/write` | Storage | Set public containers to private |
+| `Microsoft.Insights/diagnosticSettings/write` | Monitor | Enable diagnostic logging |
+| `Microsoft.Web/sites/config/write` | App Service | Enable authentication, add access restrictions |
+| `Microsoft.ApiManagement/service/backends/write` | API Management | Update APIM backend configuration |
+| `Microsoft.ApiManagement/service/apis/write` | API Management | Update API auth policies |
+| `Microsoft.ApiManagement/service/namedValues/write` | API Management | Migrate secrets to Key Vault references |
+| `Microsoft.KeyVault/vaults/accessPolicies/write` | Key Vault | Grant access for APIM managed identity |
+| `Microsoft.KeyVault/vaults/secrets/write` | Key Vault | Create secrets during Key Vault migration |
+
+#### Role Definitions
+
+See [custom-role.json](custom-role.json) for the complete JSON definition.
+Deploy at the appropriate scope:
+
+| Scope | Assignable Scope Value |
+|-------|----------------------|
+| Subscription | `/subscriptions/<subscription-id>` |
+| Management Group | `/providers/Microsoft.Management/managementGroups/<management-group-id>` |
+
+---
 
 ## Entra ID Permissions
 
-For CIEM (Cloud Infrastructure Entitlement Management) related alerts remediation, configure one of the following:
+| Role | Purpose |
+|------|---------|
+| [**Global Reader**](https://learn.microsoft.com/en-us/entra/identity/role-based-access-control/permissions-reference#global-reader) | Full read-only access to all Entra ID objects — required for CIEM alert investigation and identity-aware remediation decisions |
 
-### Option 1: Global Administrator (Simplest)
-- **Global Administrator** - Directory Role with full administrative access to Entra ID
+> **Guest user remediation** additionally requires the Microsoft Graph application permission `User.ReadWrite.All` on the App Registration. This is a Graph API permission, not an Azure RBAC role — configure it under **App Registration → API Permissions** in the Azure Portal.
 
-### Option 2: Directory Readers 
-
-### Option 3: Custom Role Enhancement
-Add the following permission to remediation custom-role JSON:
-```json
-"Microsoft.Authorization/roleAssignments/*"
-```
-
-This permission allows management of role assignments, which is essential for CIEM remediation activities.
-
-## Deployment Recommendations
-
-### For Maximum Coverage (Recommended)
-1. **Azure Resources:** Deploy **Owner** role at Subscription or Management Group scope
-2. **Entra ID:** Assign **Global Administrator** directory role
-
-### For Granular Control
-1. **Azure Resources:** Deploy custom role with attached JSON permissions
-2. **Entra ID:** Add `Microsoft.Authorization/roleAssignments/*` to custom role JSON
-
-### Scope Considerations
-- **Tenant Level:** Maximum coverage across all subscriptions and management groups
-- **Management Group Level:** Coverage for specific organizational units
-- **Subscription Level:** Targeted coverage for specific subscriptions
-
-## Security Best Practices
-
-1. **Principle of Least Privilege:** Use custom roles when possible to limit permissions to only what's required
-2. **Regular Review:** Periodically review and audit assigned permissions
-3. **Separation of Duties:** Consider separate accounts for different types of remediation activities
-4. **Monitoring:** Enable logging and monitoring for all privileged operations
-5. **Time-Limited Access:** Implement PIM (Privileged Identity Management) where applicable
+---
 
 ## Implementation Checklist
 
-- [ ] Choose between Option 1 (Built-in) or Option 2 (Custom) roles
-- [ ] Determine appropriate scope (Tenant/Management Group/Subscription)
-- [ ] Deploy Azure resource permissions
-- [ ] Configure Entra ID permissions
-- [ ] Test remediatio
+This checklist assumes [Assisted-Remediation](../Assisted-Remediation/README.md) Method 1
+(Bicep template) has already been deployed, creating the `TamnoonFederationApp` Service Principal.
+
+| Step | Action | Who |
+|------|--------|-----|
+| 1 | Verify Assisted-Remediation deployment is complete — `TamnoonFederationApp` SPN exists with Reader, Storage Blob Data Reader, Log Analytics Reader, Directory Readers | Customer |
+| 2 | Choose remediation approach: **Option 1** (built-in roles) or **Option 2** (custom role) | Customer + Tamnoon |
+| 3a | *If Option 1:* Assign Contributor + User Access Administrator to the SPN at desired scope | Customer |
+| 3b | *If Option 2:* Create custom role from [custom-role.json](custom-role.json) at desired scope | Customer |
+| 4 | Assign the chosen role(s) to the `TamnoonFederationApp` Service Principal | Customer |
+| 5 | Assign [Global Reader](https://learn.microsoft.com/en-us/entra/identity/role-based-access-control/permissions-reference#global-reader) Entra ID directory role to the SPN | Customer |
+| 6 | *(Optional)* Grant `User.ReadWrite.All` Graph API permission for guest user remediation | Customer |
+| 7 | Validate — Tamnoon runs remediation workflows in dry-run mode to confirm access | Tamnoon |
+
+---
+
+## Permissions Summary
+
+| Layer | Investigation (Assisted-Remediation) | Full-Remediation (this document) |
+|-------|--------------------------------------|----------------------------------|
+| Azure RBAC — Built-in | Reader, Storage Blob Data Reader, Log Analytics Reader | + Contributor & User Access Admin (Option 1) |
+| Azure RBAC — Custom | 15 investigation permissions | + 16 remediation permissions (Option 2) |
+| Entra ID — Directory Role | Directory Readers | + Global Reader |
+| Microsoft Graph | — | + `User.ReadWrite.All` *(optional, guest remediation)* |
+
+## Support
+
+For help configuring remediation permissions, contact your Tamnoon
+CloudPros integration engineer.
+
+Maintained by: [tamnoon.io](https://tamnoon.io)
