@@ -120,9 +120,9 @@ def parse_resource_ids(input_str):
     return [rid.strip() for rid in input_str.split() if rid.strip()]
 
 
-def format_member(email, member_type):
-    """Format member string for gcloud command."""
-    return f"{member_type}:{email}"
+def format_member(email):
+    """Format member string for gcloud command. Always 'user' type."""
+    return f"user:{email}"
 
 
 # =============================================================================
@@ -575,24 +575,16 @@ def interactive_mode():
         print(f"\n{error}")
         return 1
 
-    # 4. Get member type
-    try:
-        type_input = input("Member type - (u)ser or (s)erviceAccount [u]: ").strip().lower()
-    except (KeyboardInterrupt, EOFError):
-        print("\nCancelled.")
-        return 1
+    member = format_member(member_email)
 
-    member_type = "serviceAccount" if type_input in ('s', 'serviceaccount') else "user"
-    member = format_member(member_email, member_type)
-
-    # 5. Show validation and confirm
+    # 4. Show validation and confirm
     show_validation_summary(scope_type, resources, member, roles)
 
     if not prompt_confirmation():
         print("Cancelled.")
         return 1
 
-    # 6. Execute role assignment
+    # 5. Execute
     results_by_resource = {}
     total = len(resources)
 
@@ -602,6 +594,7 @@ def interactive_mode():
         results = assign_roles_to_resource(scope_type, resource_id, member, roles, index, total_count)
         results_by_resource[resource_id] = results
 
+    # 6. Print summary
     print_summary(scope_type, results_by_resource)
 
     # 7. Hint about API enablement
@@ -641,8 +634,6 @@ Examples:
                         help="One or more project IDs (for project scope)")
     parser.add_argument("--member", default=DEFAULT_MEMBER,
                         help=f"Member email (default: {DEFAULT_MEMBER})")
-    parser.add_argument("--member-type", choices=["user", "serviceAccount", "group"], default="user",
-                        help="Member type: user, serviceAccount, or group (default: user)")
     parser.add_argument("--enable-apis", action="store_true",
                         help="Enable required GCP APIs on projects in scope")
     parser.add_argument("--yes", "-y", action="store_true",
@@ -685,7 +676,7 @@ Examples:
         print(error)
         return 1
 
-    member = format_member(args.member, args.member_type)
+    member = format_member(args.member)
 
     # Check authentication
     auth_ok, account = check_gcloud_auth()
