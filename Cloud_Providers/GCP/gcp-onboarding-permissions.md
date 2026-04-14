@@ -247,16 +247,40 @@ If `roles/logging.privateLogViewer` cannot be assigned, Tamnoon recommends creat
 
 ## 7. SCC Coverage via Security Reviewer
 
-`roles/iam.securityReviewer` includes 22 SCC permissions — no separate SCC roles needed for standard use:
+`roles/iam.securityReviewer` includes 22 SCC permissions — sufficient for **investigation scripts** that discover and analyze findings:
 
 | SCC Permission | Capability |
 |----------------|------------|
 | `securitycenter.findings.list` | List threat, vulnerability, and misconfiguration findings |
+| `securitycenter.issues.list` | List SCC issues (grouped findings) |
 | `securitycenter.assets.list` | List SCC asset inventory |
 | `securitycenter.attackpaths.list` | List attack path simulations |
 | `securitycenter.sources.list` | List SCC finding sources |
 
-**When separate SCC roles ARE still needed**: If Tamnoon is onboarded at **project level** (no `roles/iam.securityReviewer`), or if SCC is activated at folder level and the customer needs granular SCC role control. See [SCC Integration](gcp-scc-integration.md) for folder-level role details.
+### What `iam.securityReviewer` does NOT include
+
+The following SCC permissions require `roles/securitycenter.findingsViewer` (which is a superset of `roles/securitycenter.issuesViewer` — never grant both):
+
+| Permission | Capability | When needed |
+|------------|-----------|-------------|
+| `securitycenter.issues.get` | Fetch a specific Issue by ID | Programmatic SCC alert ingestion |
+| `securitycenter.findings.group` | Aggregate findings by category/severity | Dashboard / reporting |
+| `securitycenter.findingexplanations.get` | SCC AI-generated finding explanations | Enriched alert context |
+| `securitycenter.graphs.get` / `.query` | Attack graph traversal | Finding correlation |
+| `securitycenter.issues.group` / `.listFilterValues` | Issue aggregation and filter discovery | Issue-level analytics |
+
+### When to use which role
+
+| Use Case | Role | Scope |
+|----------|------|-------|
+| **Investigation scripts** (`--csv-input` driven) | `roles/iam.securityReviewer` (already in onboarding) | Org / Folder / Project |
+| **SCC alert ingestion** (Tamnoon Alerts page) | `roles/securitycenter.findingsViewer` (add to the same SA) | Org or Project (SCC doesn't support folder-level activation) |
+
+**Legacy onboarding** (current): `tamnoonpoc@tamnoon.io` user account — add `findingsViewer` to the same user for SCC ingestion.
+
+**SA-based onboarding** (May 2026+): A single SA handles both investigation and SCC ingestion. Grant both the onboarding roles and `findingsViewer` — they are additive with minimal overlap.
+
+See [SCC Integration](gcp-scc-integration.md) for setup details.
 
 ---
 
@@ -265,5 +289,6 @@ If `roles/logging.privateLogViewer` cannot be assigned, Tamnoon recommends creat
 | Integration | Purpose | Configuration | Doc |
 |-------------|---------|---------------|-----|
 | **Google Workspace** | Enrich user/group investigations with identity context (name, OU, status, group membership) | Domain-wide delegation with Admin SDK read-only scopes | [Workspace Integration](gcp-workspace-integration.md) |
+| **SCC Alert Ingestion** | Programmatic ingestion of SCC findings into Tamnoon Alerts page | Dedicated SA with `findingsViewer` at org or project scope | [SCC Integration](gcp-scc-integration.md) |
 
-**Note**: Workspace is the only integration that requires configuration beyond the standard onboarding roles. SCC access is already covered by `roles/iam.securityReviewer` at org/folder scope.
+**Note**: Workspace and SCC Alert Ingestion are the only integrations that require configuration beyond the standard onboarding roles. For investigation scripts, SCC access is already covered by `roles/iam.securityReviewer` at org/folder scope.
