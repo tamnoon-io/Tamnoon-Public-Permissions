@@ -10,21 +10,75 @@ This document defines the GCP IAM roles assigned to the Tamnoon principal for in
 
 ### Operator Permissions
 
-The user performing the onboarding must have sufficient permissions to assign IAM roles at the target scope.
+The onboarding is deployed via [Infrastructure Manager](https://cloud.google.com/infrastructure-manager/docs) using the [`tamnoon-io/gcp-onboarding`](https://github.com/tamnoon-io/gcp-onboarding) Terraform module. The operator must have sufficient permissions to create the deployment and the resources it provisions.
+
+**Option 1 — `roles/owner` at the identity project + scope-appropriate IAM admin**
 
 | Onboarding Scope | Operator Requirements |
 |------------------|-----------------------|
-| **Organization** | GCP Organization Owner, or a user with `roles/iam.serviceAccountAdmin`, `roles/iam.organizationRoleAdmin`, `roles/iam.securityAdmin` at org level |
-| **Project** | GCP Project Owner (or higher) |
+| **Project** | `roles/owner` on the identity project (covers SA, WIF, APIs, Infrastructure Manager, and project-level IAM bindings) |
+| **Folder** | `roles/owner` on the identity project + `roles/resourcemanager.folderIamAdmin` on the target folder(s) |
+| **Organization** | `roles/owner` on the identity project + `roles/resourcemanager.organizationAdmin` on the organization |
+
+> **Why `roles/owner` alone is not enough for folder/org scope:** `roles/owner` includes `resourcemanager.projects.setIamPolicy` but does **not** include `resourcemanager.folders.setIamPolicy` or `resourcemanager.organizations.setIamPolicy`. Those permissions require a separate role at the target scope.
+
+**Option 2 — Least-privilege custom role**
+
+If `roles/owner` is not acceptable, the operator needs a custom role with these permissions on the identity project:
+
+| Permission | Purpose |
+|-----------|---------|
+| `iam.serviceAccounts.create` | Create the Tamnoon service account |
+| `iam.serviceAccounts.setIamPolicy` | Bind the WIF principal to the service account |
+| `iam.googleapis.com/workloadIdentityPools.create` | Create the Workload Identity Federation pool |
+| `iam.googleapis.com/workloadIdentityPoolProviders.create` | Create the AWS identity provider |
+| `iam.roles.create` | Create the custom `TamnoonSecurityAssessment` role |
+| `serviceusage.services.enable` | Enable the Infrastructure Manager API (`config.googleapis.com`) |
+| `config.deployments.create` | Create the Infrastructure Manager deployment |
+| `resourcemanager.projects.setIamPolicy` | Assign IAM roles at project level |
+
+For folder or org scope, add the corresponding `setIamPolicy` permission at the target scope:
+- **Folder**: `resourcemanager.folders.setIamPolicy` on each target folder
+- **Organization**: `resourcemanager.organizations.setIamPolicy` on the organization
+
+> **Scope expansion** — when adding new projects or folders to an existing onboarding, the operator only needs `config.deployments.update` and the relevant `resourcemanager.*.setIamPolicy` (the service account and WIF resources already exist).
 
 We strongly recommend Organization-level onboarding — it covers all GCP projects (existing and future) automatically through IAM inheritance.
 
 ### Tamnoon Principal
 
-| Principal | Type | Status | Capabilities |
-|-----------|------|--------|-------------|
-| `tamnoonpoc@tamnoon.io` | User | Current | GCP IAM, SCC, Cloud Asset API |
-| TBD | Service Account (workload identity federation) | Planned | All current + Workspace Admin SDK (domain-wide delegation) |
+Tamnoon authenticates to customer GCP environments using a **dedicated service account** with **Workload Identity Federation (WIF)**. This eliminates long-lived credentials — Tamnoon's AWS workload assumes a federated identity that maps to the GCP service account, with no exported keys.
+
+| Component | Value |
+|-----------|-------|
+| **Service Account** | `tamnoon-federate-service-account@<project-id>.iam.gserviceaccount.com` |
+| **Authentication** | Workload Identity Federation (AWS → GCP) |
+| **Trust Model** | A single AWS IAM role is authorized to impersonate the service account |
+
+#### Infrastructure Deployment
+
+The onboarding infrastructure is deployed via the [`tamnoon-io/gcp-onboarding`](https://github.com/tamnoon-io/gcp-onboarding) Terraform module through **GCP Infrastructure Manager**. The `config.googleapis.com` API must be enabled in the identity project.
+
+The template creates the following resources:
+
+| Resource | Purpose |
+|----------|---------|
+| **Service Account** (`tamnoon-federate-service-account`) | The principal that receives all IAM role bindings listed in [Section 2](#2-roles-assigned-to-tamnoon-service-account) |
+| **Workload Identity Pool** | Federation endpoint that accepts external tokens |
+| **Workload Identity Provider** (AWS) | Validates AWS STS tokens and extracts the caller's IAM role via attribute mapping |
+| **WIF Principal Binding** | Grants `roles/iam.workloadIdentityUser` so the trusted AWS role can impersonate the service account |
+| **IAM Role Bindings** | Assigns the 6 predefined roles (see [Section 2](#2-roles-assigned-to-tamnoon-service-account)) at the chosen scope |
+
+The deployment supports three scoping modes:
+- **Organization** (recommended) — set `organization_id`; roles are granted at org level and inherited by all projects
+- **Folder** — provide `folder_ids` (semicolon-delimited); roles are granted per folder
+- **Project** — provide `project_ids` (semicolon-delimited); roles are granted per project
+
+#### Initial Onboarding and Scope Expansion
+
+Both the initial deployment and scope expansion (adding new projects or folders) are handled through the Tamnoon onboarding workflow at [secure.tamnoon.io/settings/cloud/gcp/create](https://secure.tamnoon.io/settings/cloud/gcp/create). The workflow generates the appropriate `gcloud infra-manager deployments apply` command with pre-filled parameters.
+
+For scope expansion, the same deployment is re-applied with updated `project_ids` or `folder_ids` — the service account and WIF resources remain unchanged, only new IAM bindings are added.
 
 ### Organization Policy Constraints
 
@@ -51,7 +105,7 @@ For GCP organizations created after May 3, 2024, the default organization policy
 
 ---
 
-## 2. Roles Assigned to Tamnoon
+## 2. Roles Assigned to Tamnoon Service Account
 
 ### Role Inventory
 
