@@ -10,38 +10,95 @@ This document defines the GCP IAM roles assigned to the Tamnoon principal for in
 
 ### Operator Permissions
 
-The onboarding is deployed via [Infrastructure Manager](https://cloud.google.com/infrastructure-manager/docs) using the [`tamnoon-io/gcp-onboarding`](https://github.com/tamnoon-io/gcp-onboarding) Terraform module. The operator must have sufficient permissions to create the deployment and the resources it provisions.
+The onboarding is deployed via [Infrastructure Manager](https://cloud.google.com/infrastructure-manager/docs) using the [`tamnoon-io/gcp-onboarding`](https://github.com/tamnoon-io/gcp-onboarding) Terraform module. The Tamnoon UI generates a `gcloud infra-manager deployments apply` command that the customer's admin runs in Cloud Shell or a local terminal.
 
-**Option 1 — `roles/owner` at the identity project + scope-appropriate IAM admin**
+Two principals are involved — the **operator** (the human running the command) and the **acting service account** (passed via `--service-account`, which Infrastructure Manager impersonates to execute Terraform).
 
-| Onboarding Scope | Operator Requirements |
-|------------------|-----------------------|
-| **Project** | `roles/owner` on the identity project (covers SA, WIF, APIs, Infrastructure Manager, and project-level IAM bindings) |
-| **Folder** | `roles/owner` on the identity project + `roles/resourcemanager.folderIamAdmin` on the target folder(s) |
-| **Organization** | `roles/owner` on the identity project + `roles/resourcemanager.organizationAdmin` on the organization |
+#### Operator (human running the gcloud command)
 
-> **Why `roles/owner` alone is not enough for folder/org scope:** `roles/owner` includes `resourcemanager.projects.setIamPolicy` but does **not** include `resourcemanager.folders.setIamPolicy` or `resourcemanager.organizations.setIamPolicy`. Those permissions require a separate role at the target scope.
+The operator triggers the Infrastructure Manager deployment and must be able to impersonate the acting service account.
 
-**Option 2 — Least-privilege custom role**
+**Option 1 — `roles/owner` + `roles/config.admin` on the identity project**
 
-If `roles/owner` is not acceptable, the operator needs a custom role with these permissions on the identity project:
+`roles/owner` covers API enablement, `iam.serviceAccounts.actAs`, and general project administration. `roles/config.admin` covers all Infrastructure Manager operations (`deployments apply` needs `create`, `get`, `update`, `lock`, `unlock`, `getState`, `updateState`, plus `revisions.get` and `revisions.list`).
+
+**Option 2 — Least-privilege custom role on the identity project**
 
 | Permission | Purpose |
 |-----------|---------|
-| `iam.serviceAccounts.create` | Create the Tamnoon service account |
-| `iam.serviceAccounts.setIamPolicy` | Bind the WIF principal to the service account |
+| `iam.serviceAccounts.create` | Create the acting service account (pre-requisite) |
+| `iam.serviceAccounts.get` | Verify the acting service account exists |
+| `iam.serviceAccounts.list` | List service accounts in the project |
+| `resourcemanager.projects.setIamPolicy` | Grant roles to the acting SA (`roles/config.agent` + resource permissions) |
+| `serviceusage.services.enable` | Enable the Infrastructure Manager API (`config.googleapis.com`) |
+| `iam.serviceAccounts.actAs` | Impersonate the acting service account via `--service-account` |
+| `config.deployments.create` | Create the Infrastructure Manager deployment |
+| `config.deployments.get` | Check if deployment exists, read current state |
+| `config.deployments.update` | Update existing deployment (scope expansion) |
+| `config.deployments.getLock` | Read Terraform state lock |
+| `config.deployments.lock` | Acquire state lock during apply |
+| `config.deployments.unlock` | Release state lock |
+| `config.deployments.getState` | Read Terraform state |
+| `config.deployments.updateState` | Write Terraform state |
+| `config.revisions.get` | Read revision output |
+| `config.revisions.list` | List revisions |
+
+> Alternatively, `roles/config.admin` can replace the `config.*` permissions, and `roles/iam.serviceAccountAdmin` can replace `iam.serviceAccounts.create`.
+
+> **Recommended:** Scope `iam.serviceAccounts.actAs` to the specific acting service account using an [IAM Condition](https://cloud.google.com/iam/docs/conditions-overview). Without a condition, the operator can impersonate any service account in the project.
+>
+> ```bash
+> gcloud projects add-iam-policy-binding <identity-project> \
+>   --member="user:<operator-email>" \
+>   --role="roles/iam.serviceAccountUser" \
+>   --condition="expression=resource.name == 'projects/<identity-project>/serviceAccounts/<acting-sa-email>',title=Restrict to Tamnoon acting SA"
+> ```
+
+#### Acting Service Account (Infrastructure Manager)
+
+This is the service account that Infrastructure Manager impersonates to execute the Terraform module (passed via `--service-account` in the generated command). The Tamnoon UI asks for its fully qualified name (e.g., `projects/<project>/serviceAccounts/<sa-email>`).
+
+The acting SA needs two categories of permissions:
+- **(a) Infrastructure Manager agent** — `roles/config.agent` for managing Terraform state, logs, Cloud Build, and storage during deployment execution
+- **(b) Resource creation** — permissions to create the Tamnoon service account (`tamnoon-federate-service-account`), the Workload Identity Federation pool/provider, and IAM role bindings at the target scope
+
+**Option 1 — `roles/owner` + `roles/config.agent` on the identity project + scope-appropriate IAM admin**
+
+| Onboarding Scope | Acting SA Requirements |
+|------------------|-----------------------|
+| **Project** | `roles/config.agent` + `roles/owner` on the identity project |
+| **Folder** | `roles/config.agent` + `roles/owner` on the identity project + `roles/resourcemanager.folderIamAdmin` on the target folder(s) |
+| **Organization** | `roles/config.agent` + `roles/owner` on the identity project + `roles/resourcemanager.organizationAdmin` on the organization |
+
+> **Why `roles/owner` alone is not enough for folder/org scope:** `roles/owner` includes `resourcemanager.projects.setIamPolicy` but does **not** include `resourcemanager.folders.setIamPolicy` or `resourcemanager.organizations.setIamPolicy`. Those permissions require a separate role at the target scope.
+
+**Option 2 — Least-privilege custom role on the identity project**
+
+*Infrastructure Manager agent:*
+
+| Permission | Purpose |
+|-----------|---------|
+| `roles/config.agent` (predefined) | Required by Infrastructure Manager — manages Terraform state, logs, Cloud Build, and storage for the deployment ([docs](https://cloud.google.com/infrastructure-manager/docs/configure-service-account#byosa-permissions)) |
+
+*Tamnoon service account and WIF creation:*
+
+| Permission | Purpose |
+|-----------|---------|
+| `iam.serviceAccounts.create` | Create the Tamnoon service account (`tamnoon-federate-service-account`) |
+| `iam.serviceAccounts.setIamPolicy` | Bind the WIF principal to the Tamnoon service account |
 | `iam.googleapis.com/workloadIdentityPools.create` | Create the Workload Identity Federation pool |
 | `iam.googleapis.com/workloadIdentityPoolProviders.create` | Create the AWS identity provider |
 | `iam.roles.create` | Create the custom `TamnoonSecurityAssessment` role |
-| `serviceusage.services.enable` | Enable the Infrastructure Manager API (`config.googleapis.com`) |
-| `config.deployments.create` | Create the Infrastructure Manager deployment |
-| `resourcemanager.projects.setIamPolicy` | Assign IAM roles at project level |
 
-For folder or org scope, add the corresponding `setIamPolicy` permission at the target scope:
-- **Folder**: `resourcemanager.folders.setIamPolicy` on each target folder
-- **Organization**: `resourcemanager.organizations.setIamPolicy` on the organization
+*IAM role bindings (scope-dependent):*
 
-> **Scope expansion** — when adding new projects or folders to an existing onboarding, the operator only needs `config.deployments.update` and the relevant `resourcemanager.*.setIamPolicy` (the service account and WIF resources already exist).
+| Onboarding Scope | Permission | Purpose |
+|------------------|-----------|---------|
+| **Project** | `resourcemanager.projects.setIamPolicy` | Assign the 6 predefined roles to the Tamnoon SA at project level |
+| **Folder** | `resourcemanager.folders.setIamPolicy` | Assign roles at folder level (on each target folder) |
+| **Organization** | `resourcemanager.organizations.setIamPolicy` | Assign roles at org level |
+
+> **Scope expansion** — the acting SA only needs `roles/config.agent` and the relevant `resourcemanager.*.setIamPolicy` for new scope (the Tamnoon service account and WIF resources already exist). The operator still needs `config.*` permissions to trigger the deployment.
 
 We strongly recommend Organization-level onboarding — it covers all GCP projects (existing and future) automatically through IAM inheritance.
 
