@@ -26,6 +26,8 @@ The operator triggers the Infrastructure Manager deployment and must be able to 
 
 | Permission | Purpose |
 |-----------|---------|
+| `iam.serviceAccounts.create` | Create the acting service account (pre-requisite) |
+| `resourcemanager.projects.setIamPolicy` | Grant roles to the acting SA (`roles/config.agent` + resource permissions) |
 | `serviceusage.services.enable` | Enable the Infrastructure Manager API (`config.googleapis.com`) |
 | `iam.serviceAccounts.actAs` | Impersonate the acting service account via `--service-account` |
 | `config.deployments.create` | Create the Infrastructure Manager deployment |
@@ -39,7 +41,7 @@ The operator triggers the Infrastructure Manager deployment and must be able to 
 | `config.revisions.get` | Read revision output |
 | `config.revisions.list` | List revisions |
 
-> Alternatively, `roles/config.admin` can replace all `config.*` permissions above.
+> Alternatively, `roles/config.admin` can replace the `config.*` permissions, and `roles/iam.serviceAccountAdmin` can replace `iam.serviceAccounts.create`.
 
 #### Acting Service Account (--service-account flag)
 
