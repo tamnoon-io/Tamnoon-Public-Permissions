@@ -35,13 +35,24 @@ If `roles/owner` is not acceptable, the operator needs a custom role with these 
 | `iam.roles.create` | Create the custom `TamnoonSecurityAssessment` role |
 | `serviceusage.services.enable` | Enable the Infrastructure Manager API (`config.googleapis.com`) |
 | `config.deployments.create` | Create the Infrastructure Manager deployment |
+| `config.deployments.get` | Check if deployment exists, read current state |
+| `config.deployments.update` | Update existing deployment |
+| `config.deployments.getLock` | Read Terraform state lock |
+| `config.deployments.lock` | Acquire state lock during apply |
+| `config.deployments.unlock` | Release state lock |
+| `config.deployments.getState` | Read Terraform state |
+| `config.deployments.updateState` | Write Terraform state |
+| `config.revisions.get` | Read revision output |
+| `config.revisions.list` | List revisions |
 | `resourcemanager.projects.setIamPolicy` | Assign IAM roles at project level |
+
+> Alternatively, the predefined `roles/config.admin` role can be used instead of the individual `config.*` permissions above.
 
 For folder or org scope, add the corresponding `setIamPolicy` permission at the target scope:
 - **Folder**: `resourcemanager.folders.setIamPolicy` on each target folder
 - **Organization**: `resourcemanager.organizations.setIamPolicy` on the organization
 
-> **Scope expansion** — when adding new projects or folders to an existing onboarding, the operator only needs `config.deployments.update` and the relevant `resourcemanager.*.setIamPolicy` (the service account and WIF resources already exist).
+> **Scope expansion** — when adding new projects or folders to an existing onboarding, the operator needs `roles/config.admin` (for `deployments apply`) and the relevant `resourcemanager.*.setIamPolicy` (the service account and WIF resources already exist).
 
 We strongly recommend Organization-level onboarding — it covers all GCP projects (existing and future) automatically through IAM inheritance.
 
