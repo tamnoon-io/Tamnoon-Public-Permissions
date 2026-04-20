@@ -43,6 +43,15 @@ The operator triggers the Infrastructure Manager deployment and must be able to 
 
 > Alternatively, `roles/config.admin` can replace the `config.*` permissions, and `roles/iam.serviceAccountAdmin` can replace `iam.serviceAccounts.create`.
 
+> **Recommended:** Scope `iam.serviceAccounts.actAs` to the specific acting service account using an [IAM Condition](https://cloud.google.com/iam/docs/conditions-overview). Without a condition, the operator can impersonate any service account in the project.
+>
+> ```bash
+> gcloud projects add-iam-policy-binding <identity-project> \
+>   --member="user:<operator-email>" \
+>   --role="roles/iam.serviceAccountUser" \
+>   --condition="expression=resource.name == 'projects/<identity-project>/serviceAccounts/<acting-sa-email>',title=Restrict to Tamnoon acting SA"
+> ```
+
 #### Acting Service Account (Infrastructure Manager)
 
 This is the service account that Infrastructure Manager impersonates to execute the Terraform module (passed via `--service-account` in the generated command). The Tamnoon UI asks for its fully qualified name (e.g., `projects/<project>/serviceAccounts/<sa-email>`).
