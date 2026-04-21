@@ -60,7 +60,7 @@ This is the service account that Infrastructure Manager impersonates to execute 
 
 The acting SA needs two categories of permissions:
 - **(a) Infrastructure Manager agent** — `roles/config.agent` for managing Terraform state, logs, Cloud Build, and storage during deployment execution
-- **(b) Resource creation** — permissions to create the Tamnoon service account (`tamnoon-federate-service-account`), the Workload Identity Federation pool/provider, and IAM role bindings at the target scope
+- **(b) Resource creation** — permissions to create the Tamnoon service account (`tamnoon-federate-svc-account`), the Workload Identity Federation pool/provider, and IAM role bindings at the target scope
 
 **Option 1 — `roles/owner` + `roles/config.agent` on the identity project + scope-appropriate IAM admin**
 
@@ -90,7 +90,7 @@ The acting SA needs two categories of permissions:
 
 | Permission | Purpose |
 |-----------|---------|
-| `iam.serviceAccounts.create` | Create the Tamnoon service account (`tamnoon-federate-service-account`) |
+| `iam.serviceAccounts.create` | Create the Tamnoon service account (`tamnoon-federate-svc-account`) |
 | `iam.serviceAccounts.get` | Read service account state (`terraform plan` / refresh) |
 | `iam.serviceAccounts.list` | List service accounts in the project |
 | `iam.serviceAccounts.update` | Update service account attributes |
@@ -144,7 +144,7 @@ Tamnoon authenticates to customer GCP environments using a **dedicated service a
 
 | Component | Value |
 |-----------|-------|
-| **Service Account** | `tamnoon-federate-service-account@<project-id>.iam.gserviceaccount.com` |
+| **Service Account** | `tamnoon-federate-svc-account@<project-id>.iam.gserviceaccount.com` |
 | **Authentication** | Workload Identity Federation (AWS → GCP) |
 | **Trust Model** | A single AWS IAM role is authorized to impersonate the service account |
 
@@ -156,7 +156,7 @@ The template creates the following resources:
 
 | Resource | Purpose |
 |----------|---------|
-| **Service Account** (`tamnoon-federate-service-account`) | The principal that receives all IAM role bindings listed in [Section 2](#2-roles-assigned-to-tamnoon-service-account) |
+| **Service Account** (`tamnoon-federate-svc-account`) | The principal that receives all IAM role bindings listed in [Section 2](#2-roles-assigned-to-tamnoon-service-account) |
 | **Workload Identity Pool** | Federation endpoint that accepts external tokens |
 | **Workload Identity Provider** (AWS) | Validates AWS STS tokens and extracts the caller's IAM role via attribute mapping |
 | **WIF Principal Binding** | Grants `roles/iam.workloadIdentityUser` so the trusted AWS role can impersonate the service account |
