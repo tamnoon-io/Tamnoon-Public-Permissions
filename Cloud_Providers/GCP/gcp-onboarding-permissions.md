@@ -60,7 +60,7 @@ This is the service account that Infrastructure Manager impersonates to execute 
 
 The acting SA needs two categories of permissions:
 - **(a) Infrastructure Manager agent** — `roles/config.agent` for managing Terraform state, logs, Cloud Build, and storage during deployment execution
-- **(b) Resource creation** — permissions to create the Tamnoon service account (`tamnoon-federate-service-account`), the Workload Identity Federation pool/provider, and IAM role bindings at the target scope
+- **(b) Resource creation** — permissions to create the Tamnoon service account (`tamnoon-federate-svc-account`), the Workload Identity Federation pool/provider, and IAM role bindings at the target scope
 
 **Option 1 — `roles/owner` + `roles/config.agent` on the identity project + scope-appropriate IAM admin**
 
@@ -80,15 +80,51 @@ The acting SA needs two categories of permissions:
 |-----------|---------|
 | `roles/config.agent` (predefined) | Required by Infrastructure Manager — manages Terraform state, logs, Cloud Build, and storage for the deployment ([docs](https://cloud.google.com/infrastructure-manager/docs/configure-service-account#byosa-permissions)) |
 
-*Tamnoon service account and WIF creation:*
+*Project data source:*
 
 | Permission | Purpose |
 |-----------|---------|
-| `iam.serviceAccounts.create` | Create the Tamnoon service account (`tamnoon-federate-service-account`) |
+| `resourcemanager.projects.get` | Read identity project number (required by Terraform plan/refresh) |
+
+*Tamnoon service account (full lifecycle):*
+
+| Permission | Purpose |
+|-----------|---------|
+| `iam.serviceAccounts.create` | Create the Tamnoon service account (`tamnoon-federate-svc-account`) |
+| `iam.serviceAccounts.get` | Read service account state (`terraform plan` / refresh) |
+| `iam.serviceAccounts.list` | List service accounts in the project |
+| `iam.serviceAccounts.update` | Update service account attributes |
+| `iam.serviceAccounts.delete` | Remove the service account (`terraform destroy`) |
 | `iam.serviceAccounts.setIamPolicy` | Bind the WIF principal to the Tamnoon service account |
-| `iam.googleapis.com/workloadIdentityPools.create` | Create the Workload Identity Federation pool |
-| `iam.googleapis.com/workloadIdentityPoolProviders.create` | Create the AWS identity provider |
+
+> Alternatively, `roles/iam.serviceAccountAdmin` covers all of the above.
+
+*Workload Identity Federation (full lifecycle):*
+
+| Permission | Purpose |
+|-----------|---------|
+| `iam.googleapis.com/workloadIdentityPools.create` | Create the WIF pool |
+| `iam.googleapis.com/workloadIdentityPools.get` | Read pool state (`terraform plan` / refresh) |
+| `iam.googleapis.com/workloadIdentityPools.update` | Update pool configuration |
+| `iam.googleapis.com/workloadIdentityPools.delete` | Remove the pool (`terraform destroy`) |
+| `iam.googleapis.com/workloadIdentityPools.list` | List pools in the project |
+| `iam.googleapis.com/workloadIdentityPoolProviders.create` | Create the AWS provider |
+| `iam.googleapis.com/workloadIdentityPoolProviders.get` | Read provider state (`terraform plan` / refresh) |
+| `iam.googleapis.com/workloadIdentityPoolProviders.update` | Update provider configuration |
+| `iam.googleapis.com/workloadIdentityPoolProviders.delete` | Remove the provider (`terraform destroy`) |
+| `iam.googleapis.com/workloadIdentityPoolProviders.list` | List providers in the pool |
+
+> Alternatively, `roles/iam.workloadIdentityPoolAdmin` covers all of the above.
+
+*Custom role (full lifecycle):*
+
+| Permission | Purpose |
+|-----------|---------|
 | `iam.roles.create` | Create the custom `TamnoonSecurityAssessment` role |
+| `iam.roles.get` | Read role state (`terraform plan` / refresh) |
+| `iam.roles.update` | Update role permissions |
+| `iam.roles.delete` | Remove the role (`terraform destroy`) |
+| `iam.roles.list` | List custom roles in the project |
 
 *IAM role bindings (scope-dependent):*
 
@@ -108,7 +144,7 @@ Tamnoon authenticates to customer GCP environments using a **dedicated service a
 
 | Component | Value |
 |-----------|-------|
-| **Service Account** | `tamnoon-federate-service-account@<project-id>.iam.gserviceaccount.com` |
+| **Service Account** | `tamnoon-federate-svc-account@<project-id>.iam.gserviceaccount.com` |
 | **Authentication** | Workload Identity Federation (AWS → GCP) |
 | **Trust Model** | A single AWS IAM role is authorized to impersonate the service account |
 
@@ -120,7 +156,7 @@ The template creates the following resources:
 
 | Resource | Purpose |
 |----------|---------|
-| **Service Account** (`tamnoon-federate-service-account`) | The principal that receives all IAM role bindings listed in [Section 2](#2-roles-assigned-to-tamnoon-service-account) |
+| **Service Account** (`tamnoon-federate-svc-account`) | The principal that receives all IAM role bindings listed in [Section 2](#2-roles-assigned-to-tamnoon-service-account) |
 | **Workload Identity Pool** | Federation endpoint that accepts external tokens |
 | **Workload Identity Provider** (AWS) | Validates AWS STS tokens and extracts the caller's IAM role via attribute mapping |
 | **WIF Principal Binding** | Grants `roles/iam.workloadIdentityUser` so the trusted AWS role can impersonate the service account |
