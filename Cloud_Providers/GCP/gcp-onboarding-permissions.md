@@ -80,15 +80,51 @@ The acting SA needs two categories of permissions:
 |-----------|---------|
 | `roles/config.agent` (predefined) | Required by Infrastructure Manager — manages Terraform state, logs, Cloud Build, and storage for the deployment ([docs](https://cloud.google.com/infrastructure-manager/docs/configure-service-account#byosa-permissions)) |
 
-*Tamnoon service account and WIF creation:*
+*Project data source:*
+
+| Permission | Purpose |
+|-----------|---------|
+| `resourcemanager.projects.get` | Read identity project number (required by Terraform plan/refresh) |
+
+*Tamnoon service account (full lifecycle):*
 
 | Permission | Purpose |
 |-----------|---------|
 | `iam.serviceAccounts.create` | Create the Tamnoon service account (`tamnoon-federate-service-account`) |
+| `iam.serviceAccounts.get` | Read service account state (`terraform plan` / refresh) |
+| `iam.serviceAccounts.list` | List service accounts in the project |
+| `iam.serviceAccounts.update` | Update service account attributes |
+| `iam.serviceAccounts.delete` | Remove the service account (`terraform destroy`) |
 | `iam.serviceAccounts.setIamPolicy` | Bind the WIF principal to the Tamnoon service account |
-| `iam.googleapis.com/workloadIdentityPools.create` | Create the Workload Identity Federation pool |
-| `iam.googleapis.com/workloadIdentityPoolProviders.create` | Create the AWS identity provider |
+
+> Alternatively, `roles/iam.serviceAccountAdmin` covers all of the above.
+
+*Workload Identity Federation (full lifecycle):*
+
+| Permission | Purpose |
+|-----------|---------|
+| `iam.googleapis.com/workloadIdentityPools.create` | Create the WIF pool |
+| `iam.googleapis.com/workloadIdentityPools.get` | Read pool state (`terraform plan` / refresh) |
+| `iam.googleapis.com/workloadIdentityPools.update` | Update pool configuration |
+| `iam.googleapis.com/workloadIdentityPools.delete` | Remove the pool (`terraform destroy`) |
+| `iam.googleapis.com/workloadIdentityPools.list` | List pools in the project |
+| `iam.googleapis.com/workloadIdentityPoolProviders.create` | Create the AWS provider |
+| `iam.googleapis.com/workloadIdentityPoolProviders.get` | Read provider state (`terraform plan` / refresh) |
+| `iam.googleapis.com/workloadIdentityPoolProviders.update` | Update provider configuration |
+| `iam.googleapis.com/workloadIdentityPoolProviders.delete` | Remove the provider (`terraform destroy`) |
+| `iam.googleapis.com/workloadIdentityPoolProviders.list` | List providers in the pool |
+
+> Alternatively, `roles/iam.workloadIdentityPoolAdmin` covers all of the above.
+
+*Custom role (full lifecycle):*
+
+| Permission | Purpose |
+|-----------|---------|
 | `iam.roles.create` | Create the custom `TamnoonSecurityAssessment` role |
+| `iam.roles.get` | Read role state (`terraform plan` / refresh) |
+| `iam.roles.update` | Update role permissions |
+| `iam.roles.delete` | Remove the role (`terraform destroy`) |
+| `iam.roles.list` | List custom roles in the project |
 
 *IAM role bindings (scope-dependent):*
 
