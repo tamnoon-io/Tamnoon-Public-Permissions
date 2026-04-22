@@ -1,17 +1,39 @@
 #!/usr/bin/env python3
 """
-Tamnoon GCP Onboarding - Permission Assignment Script
+Tamnoon GCP Onboarding Script
 
-Run in Google Cloud Shell to assign required Tamnoon permissions.
+Creates the Tamnoon service account with Workload Identity Federation (WIF)
+and assigns read-only IAM roles at the chosen scope. Supports scope expansion,
+reduction, and full offboarding.
+
+Alternative to deploying the tamnoon-io/gcp-onboarding Terraform module
+via Infrastructure Manager.
+
+Run in Google Cloud Shell or any environment with gcloud CLI authenticated.
 
 Usage:
-    python3 tamnoon_onboarding.py                              # Interactive mode
-    python3 tamnoon_onboarding.py --help                       # Show help
-    python3 tamnoon_onboarding.py --scope organization --org-id 123456789
-    python3 tamnoon_onboarding.py --scope folder --folder-ids 111 222 333
-    python3 tamnoon_onboarding.py --scope project --project-ids proj-a proj-b -y
-    python3 tamnoon_onboarding.py --scope project --project-ids proj-a --enable-apis
-    python3 tamnoon_onboarding.py --scope organization --org-id 123456789 --member team@company.com --member-type group
+    python3 tamnoon_onboarding.py                    # Interactive mode
+    python3 tamnoon_onboarding.py --help              # Show help
+
+    # Fresh onboarding
+    python3 tamnoon_onboarding.py \\
+        --identity-project my-infra-project \\
+        --tenant-id 5104b7b7-56ee-4f51-97d8-0a6c49f846f5 \\
+        --scope organization --org-id 123456789
+
+    # Expand scope
+    python3 tamnoon_onboarding.py \\
+        --identity-project my-infra-project \\
+        --expand --scope project --project-ids new-proj-a new-proj-b
+
+    # Reduce scope
+    python3 tamnoon_onboarding.py \\
+        --identity-project my-infra-project \\
+        --reduce --scope project --project-ids old-proj-a
+
+    # Offboard
+    python3 tamnoon_onboarding.py \\
+        --identity-project my-infra-project --offboard
 """
 
 import argparse
@@ -21,10 +43,10 @@ import subprocess
 import sys
 
 # =============================================================================
-# Role Definitions by Scope
+# Constants
 # =============================================================================
 
-ORG_ROLES = [
+TAMNOON_ROLES = [
     "roles/viewer",
     "roles/browser",
     "roles/iam.securityReviewer",
@@ -32,28 +54,6 @@ ORG_ROLES = [
     "roles/logging.privateLogViewer",
     "roles/serviceusage.serviceUsageConsumer",
 ]
-
-FOLDER_ROLES = [
-    "roles/viewer",
-    "roles/browser",
-    "roles/iam.securityReviewer",
-    "roles/cloudasset.viewer",
-    "roles/logging.privateLogViewer",
-    "roles/serviceusage.serviceUsageConsumer",
-]
-
-PROJECT_ROLES = [
-    "roles/viewer",
-    "roles/browser",
-    "roles/iam.securityReviewer",
-    "roles/cloudasset.viewer",
-    "roles/logging.privateLogViewer",
-    "roles/serviceusage.serviceUsageConsumer",
-]
-
-# =============================================================================
-# Required APIs (enabled per-project)
-# =============================================================================
 
 REQUIRED_APIS = [
     # Core
@@ -64,6 +64,9 @@ REQUIRED_APIS = [
     "policyanalyzer.googleapis.com",
     "recommender.googleapis.com",
     "serviceusage.googleapis.com",
+    # WIF
+    "sts.googleapis.com",
+    "iamcredentials.googleapis.com",
     # Compute & Networking
     "compute.googleapis.com",
     # Serverless
@@ -79,22 +82,32 @@ REQUIRED_APIS = [
     "secretmanager.googleapis.com",
 ]
 
-DEFAULT_MEMBER = "tamnoonpoc@tamnoon.io"
+# Fixed values
+AWS_ACCOUNT_ID = "112665896816"
+SA_NAME = "tamnoon-federate-svc-account"
+POOL_ID = "tamnoon-pool-federate"
+PROVIDER_ID = "tamnoon-aws-federate"
+POOL_DISPLAY_NAME = "TamnoonWorkloadIdentityPool"
+
+# WIF attribute mapping (same as main.tf)
+ATTRIBUTE_MAPPING = (
+    "google.subject=assertion.arn,"
+    "attribute.aws_role="
+    "assertion.arn.contains('assumed-role') "
+    "? assertion.arn.extract('{account_arn}assumed-role/') + 'assumed-role/' + assertion.arn.extract('assumed-role/{role_name}/') "
+    ": assertion.arn"
+)
+
 
 # =============================================================================
 # Helper Functions
 # =============================================================================
 
-def run_gcloud(args_list, timeout=60):
+def run_gcloud(args_list, timeout=120):
     """Execute gcloud command and return (success, output, error)."""
     cmd = ["gcloud"] + args_list
     try:
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            timeout=timeout
-        )
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
         if result.returncode == 0:
             return True, result.stdout.strip(), None
         return False, result.stdout.strip(), result.stderr.strip()
@@ -114,326 +127,15 @@ def check_gcloud_auth():
     return False, error
 
 
-def parse_resource_ids(input_str):
-    """Parse comma or space separated resource IDs."""
-    input_str = input_str.replace(",", " ")
-    return [rid.strip() for rid in input_str.split() if rid.strip()]
-
-
-def format_member(email):
-    """Format member string for gcloud command. Always 'user' type."""
-    return f"user:{email}"
-
-
-# =============================================================================
-# Input Validation Functions
-# =============================================================================
-
-def validate_email(email):
-    """Validate email format. Returns (is_valid, error_message)."""
-    pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
-    if re.match(pattern, email):
-        return True, None
-    return False, f"Invalid email format: {email}"
-
-
-def validate_org_id(org_id):
-    """Validate organization ID (numeric). Returns (is_valid, error_message)."""
-    if org_id.isdigit() and len(org_id) >= 1:
-        return True, None
-    return False, f"Invalid organization ID: {org_id} (must be numeric)"
-
-
-def validate_folder_id(folder_id):
-    """Validate folder ID (numeric). Returns (is_valid, error_message)."""
-    if folder_id.isdigit() and len(folder_id) >= 1:
-        return True, None
-    return False, f"Invalid folder ID: {folder_id} (must be numeric)"
-
-
-def validate_project_id(project_id):
-    """Validate project ID format. Returns (is_valid, error_message)."""
-    pattern = r'^[a-z][a-z0-9-]{4,28}[a-z0-9]$'
-    if re.match(pattern, project_id):
-        return True, None
-    return False, f"Invalid project ID: {project_id} (must be 6-30 chars, lowercase letters, digits, hyphens)"
-
-
-def validate_resources(scope_type, resources):
-    """Validate all resource IDs for the given scope. Returns (is_valid, errors)."""
-    errors = []
-
-    for resource_id in resources:
-        if scope_type == "organization":
-            valid, error = validate_org_id(resource_id)
-        elif scope_type == "folder":
-            valid, error = validate_folder_id(resource_id)
-        elif scope_type == "project":
-            valid, error = validate_project_id(resource_id)
-        else:
-            valid, error = False, f"Unknown scope type: {scope_type}"
-
-        if not valid:
-            errors.append(error)
-
-    return len(errors) == 0, errors
-
-
-# =============================================================================
-# Project Discovery Functions
-# =============================================================================
-
-def discover_projects_in_org(org_id):
-    """List all active projects in the organization."""
-    print(f"\nDiscovering projects in organization {org_id}...")
-    success, output, error = run_gcloud([
-        "projects", "list",
-        "--filter=lifecycleState:ACTIVE",
-        "--format=value(projectId)",
-    ], timeout=120)
-
-    if not success:
-        print(f"  Failed to list projects: {error}")
-        return []
-
-    projects = [p for p in output.split('\n') if p.strip()]
-    print(f"  Found {len(projects)} active project(s)")
-    return projects
-
-
-def discover_projects_in_folders(folder_ids):
-    """Recursively list all active projects under folder(s)."""
-    all_projects = []
-    visited_folders = set()
-
-    def _recurse(folder_id):
-        if folder_id in visited_folders:
-            return
-        visited_folders.add(folder_id)
-
-        # Direct child projects
-        success, output, error = run_gcloud([
-            "projects", "list",
-            f"--filter=parent.id={folder_id} AND lifecycleState:ACTIVE",
-            "--format=value(projectId)",
-        ], timeout=120)
-
-        if success and output:
-            projects = [p for p in output.split('\n') if p.strip()]
-            all_projects.extend(projects)
-
-        # Child folders — recurse
-        success, output, error = run_gcloud([
-            "resource-manager", "folders", "list",
-            f"--folder={folder_id}",
-            "--format=value(name)",
-        ], timeout=60)
-
-        if success and output:
-            for child in output.split('\n'):
-                child = child.strip()
-                if child:
-                    child_id = child.replace("folders/", "")
-                    _recurse(child_id)
-
-    print(f"\nDiscovering projects in {len(folder_ids)} folder(s)...")
-    for folder_id in folder_ids:
-        _recurse(folder_id)
-
-    # Deduplicate (a project could appear via multiple paths)
-    all_projects = list(dict.fromkeys(all_projects))
-    print(f"  Found {len(all_projects)} active project(s)")
-    return all_projects
-
-
-# =============================================================================
-# API Enablement Functions
-# =============================================================================
-
-def enable_apis_on_project(project_id, apis, project_index=None, total_projects=None):
-    """Enable APIs on a single project. Returns results dict."""
-    results = {"success": 0, "failed": 0, "errors": []}
-
-    prefix = ""
-    if project_index is not None and total_projects is not None:
-        prefix = f"[{project_index}/{total_projects}] "
-
-    print(f"\n{prefix}Enabling APIs on project {project_id}...")
-
-    for api in apis:
-        # gcloud services enable is idempotent — safe to re-run
-        success, output, error = run_gcloud([
-            "services", "enable", api,
-            f"--project={project_id}",
-            "--quiet",
-        ], timeout=120)
-
-        if success:
-            print(f"  \u2713 {api}")
-            results["success"] += 1
-        else:
-            print(f"  \u2717 {api} ({error})")
-            results["failed"] += 1
-            results["errors"].append({"api": api, "error": error})
-
-    return results
-
-
-def run_enable_apis(scope_type, resources, auto_approve=False):
-    """Discover projects and enable APIs. Returns exit code."""
-    # Discover projects based on scope
-    if scope_type == "project":
-        projects = resources
-    elif scope_type == "organization":
-        projects = discover_projects_in_org(resources[0])
-    elif scope_type == "folder":
-        projects = discover_projects_in_folders(resources)
-    else:
-        print(f"Unknown scope: {scope_type}")
-        return 1
-
-    if not projects:
-        print("No projects found. Cannot enable APIs.")
-        return 1
-
-    # Show plan
-    print(f"\nAPIs to enable ({len(REQUIRED_APIS)}):")
-    for api in REQUIRED_APIS:
-        print(f"  - {api}")
-
-    print(f"\nTarget projects ({len(projects)}):")
-    for project_id in projects:
-        print(f"  - {project_id}")
-
-    print(f"\nTotal operations: {len(REQUIRED_APIS)} APIs x {len(projects)} projects = {len(REQUIRED_APIS) * len(projects)}")
-
-    if not auto_approve:
-        if not prompt_confirmation():
-            print("Cancelled.")
-            return 1
-
-    # Enable APIs on each project
-    results_by_project = {}
-    total = len(projects)
-
-    for i, project_id in enumerate(projects, 1):
-        index = i if total > 1 else None
-        total_count = total if total > 1 else None
-        results = enable_apis_on_project(project_id, REQUIRED_APIS, index, total_count)
-        results_by_project[project_id] = results
-
-    # Summary
-    print("\n" + "=" * 64)
-    print("API ENABLEMENT SUMMARY")
-
-    total_success = sum(r["success"] for r in results_by_project.values())
-    total_failed = sum(r["failed"] for r in results_by_project.values())
-    total_ops = total_success + total_failed
-
-    if len(projects) == 1:
-        project_id = projects[0]
-        result = results_by_project[project_id]
-        if result["failed"] == 0:
-            print(f"SUCCESS: {result['success']}/{result['success'] + result['failed']} APIs enabled on {project_id}")
-        else:
-            print(f"PARTIAL: {result['success']}/{result['success'] + result['failed']} APIs enabled on {project_id} ({result['failed']} failed)")
-            for err in result["errors"]:
-                print(f"  {err['api']}: {err['error']}")
-    else:
-        print(f"{len(projects)} projects processed: {total_success}/{total_ops} API enablements succeeded")
-        for project_id, result in results_by_project.items():
-            if result["failed"] == 0:
-                print(f"  {project_id}: {result['success']}/{result['success'] + result['failed']} \u2713")
-            else:
-                print(f"  {project_id}: {result['success']}/{result['success'] + result['failed']} ({result['failed']} failed)")
-
-    print("=" * 64 + "\n")
-
-    return 1 if total_failed > 0 else 0
-
-
-# =============================================================================
-# Role Assignment Functions
-# =============================================================================
-
-def assign_role(scope_type, resource_id, member, role):
-    """Assign a single role and return (success, error_message)."""
-    if scope_type == "organization":
-        cmd = ["organizations", "add-iam-policy-binding", resource_id,
-               f"--member={member}", f"--role={role}", "--quiet"]
-    elif scope_type == "folder":
-        cmd = ["resource-manager", "folders", "add-iam-policy-binding", resource_id,
-               f"--member={member}", f"--role={role}", "--quiet"]
-    elif scope_type == "project":
-        cmd = ["projects", "add-iam-policy-binding", resource_id,
-               f"--member={member}", f"--role={role}", "--quiet"]
-    else:
-        return False, f"Unknown scope type: {scope_type}"
-
-    success, output, error = run_gcloud(cmd)
-    if success:
-        return True, None
-    return False, error or "Unknown error"
-
-
-def assign_roles_to_resource(scope_type, resource_id, member, roles, resource_index=None, total_resources=None):
-    """Assign all roles to a single resource."""
-    results = {"success": 0, "failed": 0, "errors": []}
-
-    prefix = ""
-    if resource_index is not None and total_resources is not None:
-        prefix = f"[{resource_index}/{total_resources}] "
-
-    print(f"\n{prefix}Assigning roles to {scope_type} {resource_id}...")
-
-    for role in roles:
-        success, error = assign_role(scope_type, resource_id, member, role)
-        if success:
-            print(f"  \u2713 {role}")
-            results["success"] += 1
-        else:
-            print(f"  \u2717 {role} ({error})")
-            results["failed"] += 1
-            results["errors"].append({"role": role, "error": error})
-
-    return results
-
-
-# =============================================================================
-# Validation and Display Functions
-# =============================================================================
-
-def print_header():
-    """Print script header."""
-    print("\n" + "=" * 64)
-    print("         Tamnoon GCP Onboarding - Permission Setup")
-    print("=" * 64)
-
-
-def show_validation_summary(scope_type, resources, member, roles, enable_apis=False):
-    """Display planned actions."""
-    print_header()
-    print(f"\nScope:       {scope_type.capitalize()}")
-
-    if len(resources) == 1:
-        print(f"Resource:    {resources[0]}")
-    else:
-        print(f"Resources:   {', '.join(resources)}")
-
-    print(f"Member:      {member}")
-
-    if len(resources) > 1:
-        print(f"\nRoles to assign per {scope_type}:")
-    else:
-        print("\nRoles to assign:")
-
-    for role in roles:
-        print(f"  - {role}")
-
-    if enable_apis:
-        print(f"\nAPI enablement: Yes ({len(REQUIRED_APIS)} APIs per project)")
-
-    return True
+def prompt_input(prompt_text, default=None):
+    """Prompt user for input with optional default."""
+    suffix = f" [{default}]" if default else ""
+    try:
+        value = input(f"{prompt_text}{suffix}: ").strip()
+        return value if value else default
+    except (KeyboardInterrupt, EOFError):
+        print("\nCancelled.")
+        sys.exit(1)
 
 
 def prompt_confirmation():
@@ -446,45 +148,804 @@ def prompt_confirmation():
         return False
 
 
-def print_summary(scope_type, results_by_resource):
-    """Print final summary."""
-    print("\n" + "=" * 64)
-    print("ROLE ASSIGNMENT SUMMARY")
+def parse_resource_ids(input_str):
+    """Parse comma or space separated resource IDs."""
+    input_str = input_str.replace(",", " ")
+    return [rid.strip() for rid in input_str.split() if rid.strip()]
 
-    total_resources = len(results_by_resource)
 
-    if total_resources == 1:
-        resource_id = list(results_by_resource.keys())[0]
-        result = results_by_resource[resource_id]
-        total = result["success"] + result["failed"]
-        if result["failed"] == 0:
-            print(f"SUCCESS: {result['success']}/{total} roles assigned")
-        else:
-            print(f"PARTIAL: {result['success']}/{total} roles assigned ({result['failed']} failed)")
-    else:
-        print(f"SUMMARY: {total_resources} resources processed")
-        for resource_id, result in results_by_resource.items():
-            total = result["success"] + result["failed"]
-            if result["failed"] == 0:
-                print(f"  {resource_id}: {result['success']}/{total} roles \u2713")
+def sa_email(identity_project):
+    """Return the full SA email for the identity project."""
+    return f"{SA_NAME}@{identity_project}.iam.gserviceaccount.com"
+
+
+def get_project_number(identity_project):
+    """Get the project number for a project ID."""
+    success, number, error = run_gcloud([
+        "projects", "describe", identity_project,
+        "--format=value(projectNumber)",
+    ])
+    return number if success else None
+
+
+# =============================================================================
+# Validation
+# =============================================================================
+
+def validate_project_id(project_id):
+    pattern = r'^[a-z][a-z0-9-]{4,28}[a-z0-9]$'
+    if re.match(pattern, project_id):
+        return True, None
+    return False, f"Invalid project ID: {project_id} (must be 6-30 chars, lowercase letters, digits, hyphens)"
+
+
+def validate_org_id(org_id):
+    if org_id.isdigit() and len(org_id) >= 1:
+        return True, None
+    return False, f"Invalid organization ID: {org_id} (must be numeric)"
+
+
+def validate_folder_id(folder_id):
+    if folder_id.isdigit() and len(folder_id) >= 1:
+        return True, None
+    return False, f"Invalid folder ID: {folder_id} (must be numeric)"
+
+
+def validate_tenant_id(tenant_id):
+    pattern = r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+    if re.match(pattern, tenant_id):
+        return True, None
+    return False, f"Invalid tenant ID: {tenant_id} (expected UUID format)"
+
+
+def validate_resources(scope_type, resources):
+    validators = {
+        "organization": validate_org_id,
+        "folder": validate_folder_id,
+        "project": validate_project_id,
+    }
+    errors = []
+    for resource_id in resources:
+        valid, error = validators[scope_type](resource_id)
+        if not valid:
+            errors.append(error)
+    return len(errors) == 0, errors
+
+
+# =============================================================================
+# Discovery
+# =============================================================================
+
+def check_sa_exists(identity_project):
+    """Check if the Tamnoon SA exists. Returns True/False."""
+    success, output, error = run_gcloud([
+        "iam", "service-accounts", "describe", sa_email(identity_project),
+        f"--project={identity_project}", "--format=value(email)",
+    ])
+    return success
+
+
+def discover_current_scope(identity_project):
+    """
+    Discover where the Tamnoon SA currently has IAM bindings.
+    Returns dict: {"organizations": [...], "folders": [...], "projects": [...]}
+    """
+    email = sa_email(identity_project)
+    coverage = {"organizations": [], "folders": [], "projects": []}
+
+    # Try Cloud Asset search first (requires cloudasset.assets.searchAllIamPolicies)
+    success, output, error = run_gcloud([
+        "asset", "search-all-iam-policies",
+        f"--scope=projects/{identity_project}",
+        f"--query=policy:{email}",
+        "--format=json",
+    ], timeout=180)
+
+    if success and output:
+        try:
+            results = json.loads(output)
+            for entry in results:
+                resource = entry.get("resource", "")
+                # Parse resource type from the full resource name
+                if resource.startswith("//cloudresourcemanager.googleapis.com/organizations/"):
+                    org_id = resource.split("/organizations/")[1]
+                    if org_id not in coverage["organizations"]:
+                        coverage["organizations"].append(org_id)
+                elif resource.startswith("//cloudresourcemanager.googleapis.com/folders/"):
+                    folder_id = resource.split("/folders/")[1]
+                    if folder_id not in coverage["folders"]:
+                        coverage["folders"].append(folder_id)
+                elif resource.startswith("//cloudresourcemanager.googleapis.com/projects/"):
+                    project_id = resource.split("/projects/")[1]
+                    # Exclude the identity project's own SA IAM binding
+                    if project_id not in coverage["projects"]:
+                        coverage["projects"].append(project_id)
+            return coverage
+        except (json.JSONDecodeError, KeyError):
+            pass
+
+    # Fallback: try org-scoped search if project-scoped didn't return results
+    # The operator might have org-level cloudasset access
+    success, output, error = run_gcloud([
+        "asset", "search-all-iam-policies",
+        f"--query=policy:{email}",
+        "--format=json",
+    ], timeout=180)
+
+    if success and output:
+        try:
+            results = json.loads(output)
+            for entry in results:
+                resource = entry.get("resource", "")
+                if resource.startswith("//cloudresourcemanager.googleapis.com/organizations/"):
+                    org_id = resource.split("/organizations/")[1]
+                    if org_id not in coverage["organizations"]:
+                        coverage["organizations"].append(org_id)
+                elif resource.startswith("//cloudresourcemanager.googleapis.com/folders/"):
+                    folder_id = resource.split("/folders/")[1]
+                    if folder_id not in coverage["folders"]:
+                        coverage["folders"].append(folder_id)
+                elif resource.startswith("//cloudresourcemanager.googleapis.com/projects/"):
+                    project_id = resource.split("/projects/")[1]
+                    if project_id not in coverage["projects"]:
+                        coverage["projects"].append(project_id)
+        except (json.JSONDecodeError, KeyError):
+            pass
+
+    return coverage
+
+
+def print_current_scope(coverage):
+    """Display current scope coverage."""
+    has_any = False
+
+    if coverage["organizations"]:
+        has_any = True
+        for org_id in coverage["organizations"]:
+            print(f"  Organization: {org_id}")
+
+    if coverage["folders"]:
+        has_any = True
+        for folder_id in coverage["folders"]:
+            print(f"  Folder:       {folder_id}")
+
+    if coverage["projects"]:
+        has_any = True
+        for project_id in coverage["projects"]:
+            print(f"  Project:      {project_id}")
+
+    if not has_any:
+        print("  No IAM bindings found (scope discovery may require cloudasset.assets.searchAllIamPolicies)")
+
+
+# =============================================================================
+# Step 1: Create Service Account
+# =============================================================================
+
+def create_service_account(identity_project):
+    """Create the Tamnoon service account."""
+    print(f"\n[Step 1/5] Creating service account {SA_NAME}...")
+
+    email = sa_email(identity_project)
+
+    # Check if already exists
+    success, output, error = run_gcloud([
+        "iam", "service-accounts", "describe", email,
+        f"--project={identity_project}", "--format=value(email)",
+    ])
+    if success:
+        print(f"  Service account already exists: {email}")
+        return True, email
+
+    success, output, error = run_gcloud([
+        "iam", "service-accounts", "create", SA_NAME,
+        f"--display-name={SA_NAME}",
+        f"--project={identity_project}",
+    ])
+    if success:
+        print(f"  \u2713 Created: {email}")
+        return True, email
+
+    print(f"  \u2717 Failed: {error}")
+    return False, error
+
+
+# =============================================================================
+# Step 2: Create Workload Identity Pool
+# =============================================================================
+
+def create_wif_pool(identity_project):
+    """Create the Workload Identity Federation pool."""
+    print(f"\n[Step 2/5] Creating Workload Identity Pool {POOL_ID}...")
+
+    success, output, error = run_gcloud([
+        "iam", "workload-identity-pools", "describe", POOL_ID,
+        "--location=global", f"--project={identity_project}",
+        "--format=value(name)",
+    ])
+    if success:
+        print(f"  Pool already exists: {POOL_ID}")
+        return True
+
+    success, output, error = run_gcloud([
+        "iam", "workload-identity-pools", "create", POOL_ID,
+        "--location=global",
+        f"--display-name={POOL_DISPLAY_NAME}",
+        f"--project={identity_project}",
+    ])
+    if success:
+        print(f"  \u2713 Created: {POOL_ID}")
+        return True
+
+    print(f"  \u2717 Failed: {error}")
+    return False
+
+
+# =============================================================================
+# Step 3: Create AWS Provider
+# =============================================================================
+
+def create_wif_provider(identity_project, tenant_id):
+    """Create the AWS Workload Identity Provider."""
+    print(f"\n[Step 3/5] Creating AWS provider {PROVIDER_ID}...")
+
+    trusted_role = f"arn:aws:sts::{AWS_ACCOUNT_ID}:assumed-role/gcp-onboarding-trust-{tenant_id}"
+    attribute_condition = f"attribute.aws_role == '{trusted_role}'"
+
+    success, output, error = run_gcloud([
+        "iam", "workload-identity-pools", "providers", "describe", PROVIDER_ID,
+        f"--workload-identity-pool={POOL_ID}",
+        "--location=global", f"--project={identity_project}",
+        "--format=value(name)",
+    ])
+    if success:
+        print(f"  Provider already exists: {PROVIDER_ID}")
+        return True
+
+    success, output, error = run_gcloud([
+        "iam", "workload-identity-pools", "providers", "create-aws", PROVIDER_ID,
+        f"--workload-identity-pool={POOL_ID}",
+        "--location=global",
+        f"--account-id={AWS_ACCOUNT_ID}",
+        f"--display-name={PROVIDER_ID}",
+        f"--attribute-mapping={ATTRIBUTE_MAPPING}",
+        f"--attribute-condition={attribute_condition}",
+        f"--project={identity_project}",
+    ])
+    if success:
+        print(f"  \u2713 Created: {PROVIDER_ID}")
+        return True
+
+    print(f"  \u2717 Failed: {error}")
+    return False
+
+
+# =============================================================================
+# Step 4: Bind WIF Principal to Service Account
+# =============================================================================
+
+def bind_wif_principal(identity_project, tenant_id):
+    """Grant roles/iam.workloadIdentityUser to the trusted AWS role on the SA."""
+    print(f"\n[Step 4/5] Binding WIF principal to service account...")
+
+    project_number = get_project_number(identity_project)
+    if not project_number:
+        print(f"  \u2717 Failed to get project number")
+        return False, None
+
+    trusted_role = f"arn:aws:sts::{AWS_ACCOUNT_ID}:assumed-role/gcp-onboarding-trust-{tenant_id}"
+    member = (
+        f"principalSet://iam.googleapis.com/projects/{project_number}"
+        f"/locations/global/workloadIdentityPools/{POOL_ID}"
+        f"/attribute.aws_role/{trusted_role}"
+    )
+
+    print(f"  Principal: {member}")
+    print(f"  Role:      roles/iam.workloadIdentityUser")
+    print(f"  Target:    {sa_email(identity_project)}")
+
+    success, output, error = run_gcloud([
+        "iam", "service-accounts", "add-iam-policy-binding", sa_email(identity_project),
+        "--role=roles/iam.workloadIdentityUser",
+        f"--member={member}",
+        f"--project={identity_project}",
+    ])
+    if success:
+        print(f"  \u2713 Binding created")
+        return True, project_number
+
+    print(f"  \u2717 Failed: {error}")
+    return False, project_number
+
+
+# =============================================================================
+# Step 5: Assign / Remove IAM Roles at Scope
+# =============================================================================
+
+def assign_roles(scope_type, resources, identity_project):
+    """Assign the 6 predefined roles to the Tamnoon SA at the chosen scope."""
+    member = f"serviceAccount:{sa_email(identity_project)}"
+    total_resources = len(resources)
+
+    print(f"\n[Step 5/5] Assigning {len(TAMNOON_ROLES)} roles to {total_resources} {scope_type}(s)...")
+
+    results = {"success": 0, "failed": 0, "errors": []}
+
+    for i, resource_id in enumerate(resources, 1):
+        prefix = f"  [{i}/{total_resources}] " if total_resources > 1 else "  "
+        print(f"{prefix}{scope_type} {resource_id}:")
+
+        for role in TAMNOON_ROLES:
+            if scope_type == "organization":
+                cmd = ["organizations", "add-iam-policy-binding", resource_id,
+                       f"--member={member}", f"--role={role}", "--quiet"]
+            elif scope_type == "folder":
+                cmd = ["resource-manager", "folders", "add-iam-policy-binding", resource_id,
+                       f"--member={member}", f"--role={role}", "--quiet"]
             else:
-                print(f"  {resource_id}: {result['success']}/{total} roles ({result['failed']} failed)")
+                cmd = ["projects", "add-iam-policy-binding", resource_id,
+                       f"--member={member}", f"--role={role}", "--quiet"]
 
+            success, output, error = run_gcloud(cmd)
+            if success:
+                print(f"    \u2713 {role}")
+                results["success"] += 1
+            else:
+                print(f"    \u2717 {role} ({error})")
+                results["failed"] += 1
+                results["errors"].append({"resource": resource_id, "role": role, "error": error})
+
+    return results
+
+
+def remove_roles(scope_type, resources, identity_project):
+    """Remove the 6 predefined roles from the Tamnoon SA at the given scope."""
+    member = f"serviceAccount:{sa_email(identity_project)}"
+    total_resources = len(resources)
+
+    print(f"\nRemoving {len(TAMNOON_ROLES)} roles from {total_resources} {scope_type}(s)...")
+
+    results = {"success": 0, "failed": 0, "errors": []}
+
+    for i, resource_id in enumerate(resources, 1):
+        prefix = f"  [{i}/{total_resources}] " if total_resources > 1 else "  "
+        print(f"{prefix}{scope_type} {resource_id}:")
+
+        for role in TAMNOON_ROLES:
+            if scope_type == "organization":
+                cmd = ["organizations", "remove-iam-policy-binding", resource_id,
+                       f"--member={member}", f"--role={role}", "--quiet"]
+            elif scope_type == "folder":
+                cmd = ["resource-manager", "folders", "remove-iam-policy-binding", resource_id,
+                       f"--member={member}", f"--role={role}", "--quiet"]
+            else:
+                cmd = ["projects", "remove-iam-policy-binding", resource_id,
+                       f"--member={member}", f"--role={role}", "--quiet"]
+
+            success, output, error = run_gcloud(cmd)
+            if success:
+                print(f"    \u2713 {role} removed")
+                results["success"] += 1
+            else:
+                print(f"    \u2717 {role} ({error})")
+                results["failed"] += 1
+                results["errors"].append({"resource": resource_id, "role": role, "error": error})
+
+    return results
+
+
+# =============================================================================
+# API Enablement
+# =============================================================================
+
+def enable_apis(project_ids):
+    """Enable required APIs on the given projects."""
+    print(f"\nEnabling {len(REQUIRED_APIS)} APIs on {len(project_ids)} project(s)...")
+
+    results = {"success": 0, "failed": 0}
+
+    for i, project_id in enumerate(project_ids, 1):
+        prefix = f"[{i}/{len(project_ids)}] " if len(project_ids) > 1 else ""
+        print(f"\n{prefix}Project {project_id}:")
+
+        for api in REQUIRED_APIS:
+            success, output, error = run_gcloud([
+                "services", "enable", api,
+                f"--project={project_id}", "--quiet",
+            ])
+            if success:
+                print(f"  \u2713 {api}")
+                results["success"] += 1
+            else:
+                print(f"  \u2717 {api} ({error})")
+                results["failed"] += 1
+
+    return results
+
+
+# =============================================================================
+# Output
+# =============================================================================
+
+def print_onboarding_output(identity_project, project_number):
+    """Print JSON output for Tamnoon onboarding completion."""
+    success, sa_unique_id, error = run_gcloud([
+        "iam", "service-accounts", "describe", sa_email(identity_project),
+        f"--project={identity_project}",
+        "--format=value(uniqueId)",
+    ])
+    if not success:
+        sa_unique_id = "UNKNOWN"
+
+    output = {
+        "identity_project_number": project_number,
+        "service_account_id": sa_unique_id,
+        "workload_identity_pool_id": POOL_ID,
+        "workload_identity_provider_id": PROVIDER_ID,
+    }
+
+    print("\n" + "=" * 64)
+    print("ONBOARDING OUTPUT")
+    print("Provide this JSON to Tamnoon to complete onboarding setup:")
+    print("=" * 64)
+    print(json.dumps(output, indent=2))
     print("=" * 64 + "\n")
 
 
-def print_enable_apis_hint(scope_type, resources):
-    """Print hint about enabling APIs."""
-    print("To enable required GCP APIs on projects in scope, re-run with --enable-apis:")
-    if scope_type == "organization":
-        print(f"  python3 tamnoon_onboarding.py --scope organization --org-id {resources[0]} --enable-apis")
-    elif scope_type == "folder":
-        ids = " ".join(resources)
-        print(f"  python3 tamnoon_onboarding.py --scope folder --folder-ids {ids} --enable-apis")
-    elif scope_type == "project":
-        ids = " ".join(resources)
-        print(f"  python3 tamnoon_onboarding.py --scope project --project-ids {ids} --enable-apis")
+# =============================================================================
+# Operations
+# =============================================================================
+
+def do_fresh_onboarding(identity_project, tenant_id, scope_type, resources, do_enable_apis):
+    """Execute fresh onboarding: create SA, WIF, bind, assign roles."""
+    # Step 1: Create SA
+    success, email = create_service_account(identity_project)
+    if not success:
+        print("\nAborting: service account creation failed.")
+        return 1
+
+    # Step 2: Create WIF pool
+    if not create_wif_pool(identity_project):
+        print("\nAborting: WIF pool creation failed.")
+        return 1
+
+    # Step 3: Create WIF provider
+    if not create_wif_provider(identity_project, tenant_id):
+        print("\nAborting: WIF provider creation failed.")
+        return 1
+
+    # Step 4: Bind WIF principal
+    success, project_number = bind_wif_principal(identity_project, tenant_id)
+    if not success:
+        print("\nAborting: WIF principal binding failed.")
+        return 1
+
+    # Step 5: Assign roles
+    results = assign_roles(scope_type, resources, identity_project)
+    failed = results["failed"] > 0
+
+    # API enablement
+    if do_enable_apis:
+        if scope_type == "project":
+            api_projects = resources
+        elif scope_type == "organization":
+            print("\nDiscovering projects in organization for API enablement...")
+            success, output, error = run_gcloud([
+                "projects", "list", "--filter=lifecycleState:ACTIVE",
+                "--format=value(projectId)",
+            ])
+            api_projects = [p for p in output.split('\n') if p.strip()] if success else []
+        else:
+            api_projects = []
+            print("\nNote: API enablement for folder scope requires project discovery (not implemented).")
+
+        if api_projects:
+            api_results = enable_apis(api_projects)
+            if api_results["failed"] > 0:
+                failed = True
+
+    # Summary
+    print("\n" + "=" * 64)
+    print("ONBOARDING SUMMARY")
+    print(f"  Service account:  {email}")
+    print(f"  WIF pool:         {POOL_ID}")
+    print(f"  WIF provider:     {PROVIDER_ID}")
+    print(f"  Roles assigned:   {results['success']}/{results['success'] + results['failed']}")
+    if failed:
+        print("\n  Some operations failed — review output above.")
+    else:
+        print("\n  All operations completed successfully.")
+    print("=" * 64)
+
+    print_onboarding_output(identity_project, project_number)
+    return 1 if failed else 0
+
+
+def do_expand_scope(identity_project, coverage, scope_type, resources):
+    """Add IAM bindings for new resources."""
+    # Cross-reference with current coverage
+    current = set(coverage.get(f"{scope_type}s", []))
+    requested = set(resources)
+    already_covered = requested & current
+    to_add = list(requested - current)
+
+    if already_covered:
+        print(f"\nSkipping (already covered):")
+        for r in sorted(already_covered):
+            print(f"  {r}")
+
+    if not to_add:
+        print("\nNothing to add — all requested resources are already covered.")
+        return 0
+
+    print(f"\nResources to add:")
+    for r in to_add:
+        print(f"  {r}")
+
+    if not prompt_confirmation():
+        print("Cancelled.")
+        return 1
+
+    results = assign_roles(scope_type, to_add, identity_project)
+
+    print("\n" + "=" * 64)
+    print("SCOPE EXPANSION SUMMARY")
+    print(f"  Added:  {len(to_add)} {scope_type}(s)")
+    print(f"  Roles:  {results['success']}/{results['success'] + results['failed']}")
+    if results["failed"] > 0:
+        print("  Some operations failed — review output above.")
+    else:
+        print("  All operations completed successfully.")
+    print("=" * 64 + "\n")
+
+    return 1 if results["failed"] > 0 else 0
+
+
+def do_reduce_scope(identity_project, coverage, scope_type, resources):
+    """Remove IAM bindings for specified resources."""
+    current = set(coverage.get(f"{scope_type}s", []))
+    requested = set(resources)
+    not_found = requested - current
+    to_remove = list(requested & current)
+
+    if not_found:
+        print(f"\nSkipping (no bindings found):")
+        for r in sorted(not_found):
+            print(f"  {r}")
+
+    if not to_remove:
+        print("\nNothing to remove — none of the requested resources have bindings.")
+        return 0
+
+    print(f"\nResources to remove:")
+    for r in to_remove:
+        print(f"  {r}")
+
+    if not prompt_confirmation():
+        print("Cancelled.")
+        return 1
+
+    results = remove_roles(scope_type, to_remove, identity_project)
+
+    print("\n" + "=" * 64)
+    print("SCOPE REDUCTION SUMMARY")
+    print(f"  Removed: {len(to_remove)} {scope_type}(s)")
+    print(f"  Roles:   {results['success']}/{results['success'] + results['failed']}")
+    if results["failed"] > 0:
+        print("  Some operations failed — review output above.")
+    else:
+        print("  All operations completed successfully.")
+    print("=" * 64 + "\n")
+
+    return 1 if results["failed"] > 0 else 0
+
+
+def do_offboard(identity_project, coverage):
+    """Remove all IAM bindings, delete WIF resources, delete SA."""
+    print("\n" + "=" * 64)
+    print("  WARNING: This will delete the Tamnoon service account,")
+    print("  Workload Identity Pool, Provider, and all IAM bindings.")
+    print("=" * 64)
+
+    if not prompt_confirmation():
+        print("Cancelled.")
+        return 1
+
+    failed = False
+
+    # Step 1: Remove all discovered IAM bindings
+    print("\n[Step 1/4] Removing IAM role bindings...")
+    for scope_type_key, scope_cmd in [("organizations", "organization"), ("folders", "folder"), ("projects", "project")]:
+        resources = coverage.get(scope_type_key, [])
+        if resources:
+            results = remove_roles(scope_cmd, resources, identity_project)
+            if results["failed"] > 0:
+                failed = True
+
+    # Step 2: Delete WIF provider
+    print(f"\n[Step 2/4] Deleting WIF provider {PROVIDER_ID}...")
+    success, output, error = run_gcloud([
+        "iam", "workload-identity-pools", "providers", "delete", PROVIDER_ID,
+        f"--workload-identity-pool={POOL_ID}",
+        "--location=global", f"--project={identity_project}", "--quiet",
+    ])
+    if success:
+        print(f"  \u2713 Deleted: {PROVIDER_ID}")
+    else:
+        print(f"  \u2717 Failed: {error}")
+        failed = True
+
+    # Step 3: Delete WIF pool
+    print(f"\n[Step 3/4] Deleting WIF pool {POOL_ID}...")
+    success, output, error = run_gcloud([
+        "iam", "workload-identity-pools", "delete", POOL_ID,
+        "--location=global", f"--project={identity_project}", "--quiet",
+    ])
+    if success:
+        print(f"  \u2713 Deleted: {POOL_ID}")
+    else:
+        print(f"  \u2717 Failed: {error}")
+        failed = True
+
+    # Step 4: Delete SA
+    print(f"\n[Step 4/4] Deleting service account {SA_NAME}...")
+    success, output, error = run_gcloud([
+        "iam", "service-accounts", "delete", sa_email(identity_project),
+        f"--project={identity_project}", "--quiet",
+    ])
+    if success:
+        print(f"  \u2713 Deleted: {sa_email(identity_project)}")
+    else:
+        print(f"  \u2717 Failed: {error}")
+        failed = True
+
+    print("\n" + "=" * 64)
+    print("OFFBOARDING SUMMARY")
+    if failed:
+        print("  Some operations failed — review output above.")
+    else:
+        print("  Tamnoon onboarding fully removed.")
+    print("=" * 64 + "\n")
+
+    return 1 if failed else 0
+
+
+# =============================================================================
+# Plan Display
+# =============================================================================
+
+def show_fresh_plan(identity_project, tenant_id, scope_type, resources, do_enable_apis):
+    """Display planned actions for fresh onboarding."""
+    trusted_role = f"gcp-onboarding-trust-{tenant_id}"
+
+    print(f"\nIdentity project:    {identity_project}")
+    print(f"Tamnoon tenant ID:   {tenant_id}")
+    print(f"Scope:               {scope_type.capitalize()}")
+
+    if len(resources) == 1:
+        print(f"Target:              {resources[0]}")
+    else:
+        print(f"Targets:             {', '.join(resources)}")
+
+    print(f"\nResources to create:")
+    print(f"  1. Service account:  {sa_email(identity_project)}")
+    print(f"  2. WIF pool:         {POOL_ID}")
+    print(f"  3. WIF provider:     {PROVIDER_ID} (AWS {AWS_ACCOUNT_ID})")
+    print(f"  4. WIF binding:      roles/iam.workloadIdentityUser")
+    print(f"     Trusted role:     {trusted_role}")
+
+    print(f"\nRoles to assign ({len(TAMNOON_ROLES)}):")
+    for role in TAMNOON_ROLES:
+        print(f"  - {role}")
+
+    if do_enable_apis:
+        print(f"\nAPI enablement:      Yes ({len(REQUIRED_APIS)} APIs)")
+
+
+# =============================================================================
+# Interactive Prompts
+# =============================================================================
+
+def prompt_identity_project():
+    """Prompt for identity project with explanation."""
+    print("\nIdentity Project")
+    print("  The GCP project where the Tamnoon service account, Workload Identity")
+    print("  Pool, and Provider will be created. This can be any project in your")
+    print("  organization (e.g., a shared infrastructure or security project).")
+    identity_project = prompt_input("\nEnter project ID")
+    if not identity_project:
+        print("Project ID is required.")
+        sys.exit(1)
+    valid, error = validate_project_id(identity_project)
+    if not valid:
+        print(error)
+        sys.exit(1)
+    return identity_project
+
+
+def prompt_tenant_id():
+    """Prompt for Tamnoon tenant ID with explanation."""
+    print("\nTamnoon Tenant ID")
+    print("  Your Tamnoon tenant identifier (UUID format). This is provided by")
+    print("  Tamnoon during onboarding and is used to establish the trust")
+    print("  relationship between Tamnoon's AWS environment and your GCP project.")
+    tenant_id = prompt_input("\nEnter tenant ID")
+    if not tenant_id:
+        print("Tenant ID is required.")
+        sys.exit(1)
+    valid, error = validate_tenant_id(tenant_id)
+    if not valid:
+        print(error)
+        sys.exit(1)
+    return tenant_id
+
+
+def prompt_scope():
+    """Prompt for onboarding scope with explanation."""
+    print("\nOnboarding Scope")
+    print("  Determines where the Tamnoon service account will receive IAM roles.")
+    print("  Organization scope is recommended — it covers all current and future")
+    print("  projects through IAM inheritance. Folder or project scope limits")
+    print("  access to specific parts of your hierarchy.")
     print()
+    print("  1. Organization (recommended — covers all projects)")
+    print("  2. Folder (covers all projects within selected folders)")
+    print("  3. Project (covers only the selected projects)")
+
+    scope_choice = prompt_input("\nEnter choice [1-3]")
+    scope_map = {"1": "organization", "2": "folder", "3": "project"}
+    if scope_choice not in scope_map:
+        print("Invalid choice.")
+        sys.exit(1)
+    return scope_map[scope_choice]
+
+
+def prompt_scope_resources(scope_type):
+    """Prompt for scope resource IDs with explanation."""
+    if scope_type == "organization":
+        print("\nOrganization ID")
+        print("  The numeric ID of your GCP organization. You can find it in the")
+        print("  GCP Console under IAM & Admin > Settings, or by running:")
+        print("  gcloud organizations list")
+        resource_input = prompt_input("\nEnter organization ID")
+    elif scope_type == "folder":
+        print("\nFolder ID(s)")
+        print("  The numeric ID(s) of the GCP folder(s) to onboard. All projects")
+        print("  within these folders will be covered through IAM inheritance.")
+        print("  For multiple folders, separate with commas or spaces.")
+        resource_input = prompt_input("\nEnter folder ID(s)")
+    else:
+        print("\nProject ID(s)")
+        print("  The GCP project ID(s) to onboard. Only these specific projects")
+        print("  will be covered. For multiple projects, separate with commas or spaces.")
+        resource_input = prompt_input("\nEnter project ID(s)")
+
+    if not resource_input:
+        print("No resource IDs provided.")
+        sys.exit(1)
+
+    resources = parse_resource_ids(resource_input)
+    if scope_type == "organization" and len(resources) > 1:
+        print("Organization scope supports a single ID.")
+        resources = [resources[0]]
+
+    valid, errors = validate_resources(scope_type, resources)
+    if not valid:
+        for e in errors:
+            print(f"  - {e}")
+        sys.exit(1)
+
+    return resources
+
+
+def prompt_enable_apis():
+    """Prompt for API enablement with explanation."""
+    print("\nAPI Enablement")
+    print("  Tamnoon requires specific GCP APIs to be enabled on each project in")
+    print(f"  scope ({len(REQUIRED_APIS)} APIs including IAM, Cloud Asset, Logging, Compute, etc.).")
+    print("  This step is safe to run — API enablement is idempotent.")
+    choice = prompt_input("\nEnable required APIs on target projects? [y/N]", "N")
+    return choice.lower() in ('y', 'yes')
 
 
 # =============================================================================
@@ -493,116 +954,81 @@ def print_enable_apis_hint(scope_type, resources):
 
 def interactive_mode():
     """Run in interactive mode with prompts."""
-    print_header()
+    print("\n" + "=" * 64)
+    print("         Tamnoon GCP Onboarding — Interactive Setup")
+    print("=" * 64)
 
-    # Check authentication
+    # Check auth
     auth_ok, account = check_gcloud_auth()
     if not auth_ok:
-        print(f"\nError: Not authenticated with gcloud. {account}")
+        print(f"\nError: Not authenticated. {account}")
         print("Please run 'gcloud auth login' first.")
         return 1
-
     print(f"\nAuthenticated as: {account}")
 
-    # 1. Select scope
-    print("\nSelect scope:")
-    print("  1. Organization (recommended)")
-    print("  2. Folder")
-    print("  3. Project")
+    # Identity project
+    identity_project = prompt_identity_project()
 
-    try:
-        scope_choice = input("\nEnter choice [1-3]: ").strip()
-    except (KeyboardInterrupt, EOFError):
-        print("\nCancelled.")
-        return 1
+    # Check if SA already exists
+    sa_exists = check_sa_exists(identity_project)
 
-    scope_map = {"1": "organization", "2": "folder", "3": "project"}
-    if scope_choice not in scope_map:
+    if not sa_exists:
+        # Fresh onboarding
+        print(f"\nNo existing Tamnoon service account found in {identity_project}.")
+        print("Proceeding with fresh onboarding.\n")
+
+        tenant_id = prompt_tenant_id()
+        scope_type = prompt_scope()
+        resources = prompt_scope_resources(scope_type)
+        do_enable_apis = prompt_enable_apis()
+
+        print("\n" + "=" * 64)
+        print("         Tamnoon GCP Onboarding — Execution Plan")
+        print("=" * 64)
+        show_fresh_plan(identity_project, tenant_id, scope_type, resources, do_enable_apis)
+
+        if not prompt_confirmation():
+            print("Cancelled.")
+            return 1
+
+        return do_fresh_onboarding(identity_project, tenant_id, scope_type, resources, do_enable_apis)
+
+    # SA exists — discover current scope
+    print(f"\nExisting Tamnoon onboarding detected:")
+    print(f"  Service account:  {sa_email(identity_project)}")
+    print(f"  WIF pool:         {POOL_ID}")
+    print(f"  WIF provider:     {PROVIDER_ID}")
+
+    print(f"\nDiscovering current scope coverage...")
+    coverage = discover_current_scope(identity_project)
+
+    print(f"\nCurrent scope:")
+    print_current_scope(coverage)
+
+    # Menu
+    print("\nWhat would you like to do?")
+    print("  1. Expand scope (add projects, folders, or organization)")
+    print("  2. Reduce scope (remove projects, folders, or organization)")
+    print("  3. Offboarding (delete Tamnoon SA and associated WIF Pool and Provider)")
+
+    choice = prompt_input("\nEnter choice [1-3]")
+
+    if choice == "1":
+        scope_type = prompt_scope()
+        resources = prompt_scope_resources(scope_type)
+        return do_expand_scope(identity_project, coverage, scope_type, resources)
+
+    elif choice == "2":
+        scope_type = prompt_scope()
+        resources = prompt_scope_resources(scope_type)
+        return do_reduce_scope(identity_project, coverage, scope_type, resources)
+
+    elif choice == "3":
+        return do_offboard(identity_project, coverage)
+
+    else:
         print("Invalid choice.")
         return 1
-
-    scope_type = scope_map[scope_choice]
-
-    # 2. Get resource ID(s)
-    if scope_type == "organization":
-        prompt = "\nEnter organization ID: "
-        roles = ORG_ROLES
-    elif scope_type == "folder":
-        prompt = "\nEnter folder ID(s) (comma or space separated): "
-        roles = FOLDER_ROLES
-    else:
-        prompt = "\nEnter project ID(s) (comma or space separated): "
-        roles = PROJECT_ROLES
-
-    try:
-        resource_input = input(prompt).strip()
-    except (KeyboardInterrupt, EOFError):
-        print("\nCancelled.")
-        return 1
-
-    if not resource_input:
-        print("No resource IDs provided.")
-        return 1
-
-    resources = parse_resource_ids(resource_input)
-    if not resources:
-        print("No valid resource IDs provided.")
-        return 1
-
-    if scope_type == "organization" and len(resources) > 1:
-        print("Organization scope only supports a single organization ID.")
-        resources = [resources[0]]
-
-    # Validate resource IDs
-    valid, errors = validate_resources(scope_type, resources)
-    if not valid:
-        print("\nValidation errors:")
-        for error in errors:
-            print(f"  - {error}")
-        return 1
-
-    # 3. Get member email
-    try:
-        member_input = input(f"\nEnter member email [{DEFAULT_MEMBER}]: ").strip()
-    except (KeyboardInterrupt, EOFError):
-        print("\nCancelled.")
-        return 1
-
-    member_email = member_input if member_input else DEFAULT_MEMBER
-
-    valid, error = validate_email(member_email)
-    if not valid:
-        print(f"\n{error}")
-        return 1
-
-    member = format_member(member_email)
-
-    # 4. Show validation and confirm
-    show_validation_summary(scope_type, resources, member, roles)
-
-    if not prompt_confirmation():
-        print("Cancelled.")
-        return 1
-
-    # 5. Execute
-    results_by_resource = {}
-    total = len(resources)
-
-    for i, resource_id in enumerate(resources, 1):
-        index = i if total > 1 else None
-        total_count = total if total > 1 else None
-        results = assign_roles_to_resource(scope_type, resource_id, member, roles, index, total_count)
-        results_by_resource[resource_id] = results
-
-    # 6. Print summary
-    print_summary(scope_type, results_by_resource)
-
-    # 7. Hint about API enablement
-    print_enable_apis_hint(scope_type, resources)
-
-    if any(r["failed"] > 0 for r in results_by_resource.values()):
-        return 1
-    return 0
 
 
 # =============================================================================
@@ -611,110 +1037,159 @@ def interactive_mode():
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Tamnoon GCP Onboarding - Assign required permissions and enable APIs",
+        description="Tamnoon GCP Onboarding — Create service account with WIF and assign permissions",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
+  # Interactive mode
   python3 tamnoon_onboarding.py
-  python3 tamnoon_onboarding.py --scope organization --org-id 123456789
-  python3 tamnoon_onboarding.py --scope folder --folder-ids 111 222 333
-  python3 tamnoon_onboarding.py --scope project --project-ids proj-a proj-b -y
-  python3 tamnoon_onboarding.py --scope project --project-ids proj-a --enable-apis
-  python3 tamnoon_onboarding.py --scope organization --org-id 123456789 --enable-apis -y
+
+  # Fresh onboarding — organization scope
+  python3 tamnoon_onboarding.py \\
+      --identity-project my-infra-project \\
+      --tenant-id 5104b7b7-56ee-4f51-97d8-0a6c49f846f5 \\
+      --scope organization --org-id 123456789
+
+  # Fresh onboarding — project scope with API enablement
+  python3 tamnoon_onboarding.py \\
+      --identity-project my-infra-project \\
+      --tenant-id 5104b7b7-56ee-4f51-97d8-0a6c49f846f5 \\
+      --scope project --project-ids proj-a proj-b \\
+      --enable-apis -y
+
+  # Expand scope
+  python3 tamnoon_onboarding.py \\
+      --identity-project my-infra-project \\
+      --expand --scope project --project-ids new-proj-a new-proj-b
+
+  # Reduce scope
+  python3 tamnoon_onboarding.py \\
+      --identity-project my-infra-project \\
+      --reduce --scope project --project-ids old-proj-a
+
+  # Offboard
+  python3 tamnoon_onboarding.py \\
+      --identity-project my-infra-project --offboard
         """
     )
 
+    parser.add_argument("--identity-project", metavar="PROJECT_ID",
+                        help="GCP project ID where the SA and WIF resources are created")
+    parser.add_argument("--tenant-id", metavar="UUID",
+                        help="Tamnoon tenant ID (required for fresh onboarding)")
     parser.add_argument("--scope", choices=["organization", "folder", "project"],
-                        help="Scope level for permission assignment")
+                        help="Scope level for IAM role assignment")
     parser.add_argument("--org-id", metavar="ORG_ID",
                         help="Organization ID (for organization scope)")
     parser.add_argument("--folder-ids", nargs="+", metavar="ID",
                         help="One or more folder IDs (for folder scope)")
     parser.add_argument("--project-ids", nargs="+", metavar="ID",
                         help="One or more project IDs (for project scope)")
-    parser.add_argument("--member", default=DEFAULT_MEMBER,
-                        help=f"Member email (default: {DEFAULT_MEMBER})")
+    parser.add_argument("--expand", action="store_true",
+                        help="Expand scope — add resources to existing onboarding")
+    parser.add_argument("--reduce", action="store_true",
+                        help="Reduce scope — remove resources from existing onboarding")
+    parser.add_argument("--offboard", action="store_true",
+                        help="Delete Tamnoon SA, WIF Pool, Provider, and all IAM bindings")
     parser.add_argument("--enable-apis", action="store_true",
-                        help="Enable required GCP APIs on projects in scope")
+                        help="Enable required GCP APIs on target projects")
     parser.add_argument("--yes", "-y", action="store_true",
-                        help="Skip confirmation prompt (auto-approve)")
+                        help="Skip confirmation prompt")
 
     args = parser.parse_args()
 
-    # If no scope provided, run interactive mode
-    if not args.scope:
+    # Interactive mode if no identity-project
+    if not args.identity_project:
         return interactive_mode()
 
-    # CLI mode - validate arguments
-    if args.scope == "organization":
-        if not args.org_id:
-            parser.error("--org-id is required for organization scope")
-        resources = [args.org_id]
-        roles = ORG_ROLES
-    elif args.scope == "folder":
-        if not args.folder_ids:
-            parser.error("--folder-ids is required for folder scope")
-        resources = args.folder_ids
-        roles = FOLDER_ROLES
-    elif args.scope == "project":
-        if not args.project_ids:
-            parser.error("--project-ids is required for project scope")
-        resources = args.project_ids
-        roles = PROJECT_ROLES
-
-    # Validate resource IDs
-    valid, errors = validate_resources(args.scope, resources)
+    # Validate identity project
+    valid, error = validate_project_id(args.identity_project)
     if not valid:
-        print("Validation errors:")
-        for error in errors:
-            print(f"  - {error}")
-        return 1
+        parser.error(error)
 
-    # Validate email
-    valid, error = validate_email(args.member)
-    if not valid:
-        print(error)
-        return 1
-
-    member = format_member(args.member)
-
-    # Check authentication
+    # Check auth
     auth_ok, account = check_gcloud_auth()
     if not auth_ok:
-        print(f"Error: Not authenticated with gcloud. {account}")
-        print("Please run 'gcloud auth login' first.")
+        print(f"Error: Not authenticated. {account}")
         return 1
 
-    # Show validation summary
-    show_validation_summary(args.scope, resources, member, roles, enable_apis=args.enable_apis)
+    # Offboard mode
+    if args.offboard:
+        print(f"\nDiscovering current scope for {args.identity_project}...")
+        coverage = discover_current_scope(args.identity_project)
+        print("\nCurrent scope:")
+        print_current_scope(coverage)
+        if not args.yes:
+            if not prompt_confirmation():
+                print("Cancelled.")
+                return 1
+        return do_offboard(args.identity_project, coverage)
 
-    # Confirm unless --yes
+    # Expand / Reduce modes
+    if args.expand or args.reduce:
+        if not args.scope:
+            parser.error("--scope is required with --expand or --reduce")
+
+        resources = _resolve_scope_resources(parser, args)
+        valid, errors = validate_resources(args.scope, resources)
+        if not valid:
+            for e in errors:
+                print(f"  - {e}")
+            return 1
+
+        coverage = discover_current_scope(args.identity_project)
+        print(f"\nCurrent scope:")
+        print_current_scope(coverage)
+
+        if args.expand:
+            return do_expand_scope(args.identity_project, coverage, args.scope, resources)
+        else:
+            return do_reduce_scope(args.identity_project, coverage, args.scope, resources)
+
+    # Fresh onboarding
+    if not args.tenant_id:
+        parser.error("--tenant-id is required for fresh onboarding")
+    if not args.scope:
+        parser.error("--scope is required for fresh onboarding")
+
+    valid, error = validate_tenant_id(args.tenant_id)
+    if not valid:
+        parser.error(error)
+
+    resources = _resolve_scope_resources(parser, args)
+    valid, errors = validate_resources(args.scope, resources)
+    if not valid:
+        for e in errors:
+            print(f"  - {e}")
+        return 1
+
+    print("\n" + "=" * 64)
+    print("         Tamnoon GCP Onboarding — Execution Plan")
+    print("=" * 64)
+    show_fresh_plan(args.identity_project, args.tenant_id, args.scope, resources, args.enable_apis)
+
     if not args.yes:
         if not prompt_confirmation():
             print("Cancelled.")
             return 1
 
-    # Execute role assignment
-    results_by_resource = {}
-    total = len(resources)
+    return do_fresh_onboarding(args.identity_project, args.tenant_id, args.scope, resources, args.enable_apis)
 
-    for i, resource_id in enumerate(resources, 1):
-        index = i if total > 1 else None
-        total_count = total if total > 1 else None
-        results = assign_roles_to_resource(args.scope, resource_id, member, roles, index, total_count)
-        results_by_resource[resource_id] = results
 
-    print_summary(args.scope, results_by_resource)
-
-    role_failed = any(r["failed"] > 0 for r in results_by_resource.values())
-
-    # Execute API enablement if requested
-    if args.enable_apis:
-        api_exit = run_enable_apis(args.scope, resources, auto_approve=args.yes)
-        return 1 if (role_failed or api_exit != 0) else 0
-    else:
-        print_enable_apis_hint(args.scope, resources)
-        return 1 if role_failed else 0
+def _resolve_scope_resources(parser, args):
+    """Extract resource list from CLI args based on scope."""
+    if args.scope == "organization":
+        if not args.org_id:
+            parser.error("--org-id is required for organization scope")
+        return [args.org_id]
+    elif args.scope == "folder":
+        if not args.folder_ids:
+            parser.error("--folder-ids is required for folder scope")
+        return args.folder_ids
+    elif args.scope == "project":
+        if not args.project_ids:
+            parser.error("--project-ids is required for project scope")
+        return args.project_ids
 
 
 if __name__ == "__main__":
