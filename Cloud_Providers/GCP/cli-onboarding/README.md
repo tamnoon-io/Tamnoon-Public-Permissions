@@ -20,15 +20,28 @@ Raw `gcloud` commands for onboarding the Tamnoon service account with Workload I
 
 ### Operator Permissions
 
+*Service account and WIF creation (all scopes):*
+
 | Permission | Purpose |
 |-----------|---------|
 | `iam.serviceAccounts.create` | Create the Tamnoon service account |
 | `iam.serviceAccounts.get` | Verify SA exists |
 | `iam.serviceAccounts.setIamPolicy` | Bind the WIF principal to the SA |
 | `iam.googleapis.com/workloadIdentityPools.create` | Create the WIF pool |
+| `iam.googleapis.com/workloadIdentityPools.get` | Verify pool exists |
 | `iam.googleapis.com/workloadIdentityPoolProviders.create` | Create the AWS provider |
+| `iam.googleapis.com/workloadIdentityPoolProviders.get` | Verify provider exists |
 | `resourcemanager.projects.get` | Read project number for WIF binding |
-| `resourcemanager.{projects\|folders\|organizations}.setIamPolicy` | Assign IAM roles at the chosen scope |
+
+*IAM role assignment (scope-dependent):*
+
+| Onboarding Scope | Permission | Where |
+|------------------|-----------|-------|
+| **Project** | `resourcemanager.projects.setIamPolicy` | On each target project |
+| **Folder** | `resourcemanager.folders.setIamPolicy` | On each target folder |
+| **Organization** | `resourcemanager.organizations.setIamPolicy` | On the organization |
+
+> **Note:** `roles/owner` at project level covers all SA/WIF creation permissions but does **not** include `resourcemanager.folders.setIamPolicy` or `resourcemanager.organizations.setIamPolicy`. For folder/org scope, an additional role is needed (e.g., `roles/resourcemanager.folderIamAdmin` or `roles/resourcemanager.organizationAdmin`).
 
 See [gcp-onboarding-permissions.md](../gcp-onboarding-permissions.md#1-prerequisites) for full details including predefined role alternatives.
 
