@@ -47,7 +47,7 @@ Domain-wide delegation allows the Tamnoon service account to call Workspace Admi
 
 | Field | Value |
 |-------|-------|
-| **Client ID** | Tamnoon service account's OAuth2 Client ID (numeric, provided during onboarding) |
+| **Client ID** | The Tamnoon service account's OAuth2 Client ID. This is the numeric `service_account_id` from the onboarding output JSON (e.g., `115283947201638492751`). You can also retrieve it by running: `gcloud iam service-accounts describe tamnoon-federate-svc-account@<identity-project>.iam.gserviceaccount.com --format='value(uniqueId)'` |
 | **OAuth scopes** | See Section 3 below (comma-separated) |
 
 6. Click **Authorize**
@@ -202,7 +202,7 @@ The SA resolves the GCP organization's primary domain from the project hierarchy
 | Admin SDK API enabled | `admin.googleapis.com` on a GCP project in the org | Workspace Admin |
 | Domain-wide delegation | SA Client ID + 2 OAuth scopes registered in Admin Console | Workspace Admin |
 | Impersonation target user | `tamnoon-workspace-reader@{domain}` with read-only admin role | Workspace Admin |
-| Tamnoon SA Client ID | Provided during onboarding | Tamnoon |
+| Tamnoon SA Client ID | `service_account_id` from onboarding output, or `gcloud iam service-accounts describe tamnoon-federate-svc-account@<project>.iam.gserviceaccount.com --format='value(uniqueId)'` | Available after onboarding |
 | SA `description` parsing | No additional permissions — uses existing `iam.googleapis.com` access | Already covered by `roles/viewer` |
 
 **Scope**: Workspace integration is **organization-wide** — once configured, it covers all users and groups in the Workspace domain. There is no per-project or per-folder scoping for Workspace data.
