@@ -80,26 +80,38 @@ done
 ### Folder scope
 
 ```bash
-for role in roles/viewer roles/browser roles/iam.securityReviewer roles/cloudasset.viewer roles/logging.privateLogViewer roles/serviceusage.serviceUsageConsumer; do
-  gcloud resource-manager folders add-iam-policy-binding <folder-id> \
-    --member="serviceAccount:tamnoon-federate-svc-account@<identity-project>.iam.gserviceaccount.com" \
-    --role="$role" --quiet
+# Single folder
+FOLDERS="<folder-id>"
+
+# Multiple folders (space-separated)
+# FOLDERS="111222333 444555666 777888999"
+
+for folder_id in $FOLDERS; do
+  for role in roles/viewer roles/browser roles/iam.securityReviewer roles/cloudasset.viewer roles/logging.privateLogViewer roles/serviceusage.serviceUsageConsumer; do
+    gcloud resource-manager folders add-iam-policy-binding "$folder_id" \
+      --member="serviceAccount:tamnoon-federate-svc-account@<identity-project>.iam.gserviceaccount.com" \
+      --role="$role" --quiet
+  done
 done
 ```
-
-For multiple folders, repeat the block for each folder ID.
 
 ### Project scope
 
 ```bash
-for role in roles/viewer roles/browser roles/iam.securityReviewer roles/cloudasset.viewer roles/logging.privateLogViewer roles/serviceusage.serviceUsageConsumer; do
-  gcloud projects add-iam-policy-binding <project-id> \
-    --member="serviceAccount:tamnoon-federate-svc-account@<identity-project>.iam.gserviceaccount.com" \
-    --role="$role" --quiet
+# Single project
+PROJECTS="<project-id>"
+
+# Multiple projects (space-separated)
+# PROJECTS="cust-app-prod cust-app-staging cust-data-warehouse"
+
+for project_id in $PROJECTS; do
+  for role in roles/viewer roles/browser roles/iam.securityReviewer roles/cloudasset.viewer roles/logging.privateLogViewer roles/serviceusage.serviceUsageConsumer; do
+    gcloud projects add-iam-policy-binding "$project_id" \
+      --member="serviceAccount:tamnoon-federate-svc-account@<identity-project>.iam.gserviceaccount.com" \
+      --role="$role" --quiet
+  done
 done
 ```
-
-For multiple projects, repeat the block for each project ID.
 
 ## Step 6: Retrieve Onboarding Output
 
