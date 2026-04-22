@@ -26,11 +26,14 @@ Raw `gcloud` commands for onboarding the Tamnoon service account with Workload I
 |-----------|---------|
 | `iam.serviceAccounts.create` | Create the Tamnoon service account |
 | `iam.serviceAccounts.get` | Verify SA exists |
+| `iam.serviceAccounts.list` | List service accounts in the project |
 | `iam.serviceAccounts.setIamPolicy` | Bind the WIF principal to the SA |
 | `iam.googleapis.com/workloadIdentityPools.create` | Create the WIF pool |
 | `iam.googleapis.com/workloadIdentityPools.get` | Verify pool exists |
+| `iam.googleapis.com/workloadIdentityPools.list` | List pools in the project |
 | `iam.googleapis.com/workloadIdentityPoolProviders.create` | Create the AWS provider |
 | `iam.googleapis.com/workloadIdentityPoolProviders.get` | Verify provider exists |
+| `iam.googleapis.com/workloadIdentityPoolProviders.list` | List providers in the pool |
 | `resourcemanager.projects.get` | Read project number for WIF binding |
 
 *IAM role assignment (scope-dependent):*
