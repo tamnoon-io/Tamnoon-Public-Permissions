@@ -2,16 +2,29 @@
 
 Raw `gcloud` commands for onboarding the Tamnoon service account with Workload Identity Federation.
 
-Replace the following placeholders before running:
+### Placeholders — replace before running
 
 | Placeholder | Description | Example |
 |-------------|-------------|---------|
 | `<identity-project>` | GCP project ID where SA and WIF resources are created | `cust-shared-infra` |
 | `<tamnoon-tenant-id>` | Tamnoon tenant ID (UUID, provided during onboarding) | `5104b7b7-56ee-4f51-97d8-0a6c49f846f5` |
-| `<project-number>` | Numeric project number of the identity project | `482917305164` |
+| `<project-number>` | Numeric project number of the identity project (retrieved in Step 4) | `482917305164` |
 | `<org-id>` | Organization ID (for organization scope) | `123456789012` |
 | `<folder-id>` | Folder ID (for folder scope) | `987654321098` |
 | `<project-id>` | Target project ID (for project scope) | `cust-app-prod` |
+
+### Fixed values — do not change
+
+The following values are hardcoded in the commands and must not be modified:
+
+| Value | What it is |
+|-------|-----------|
+| `tamnoon-federate-svc-account` | Tamnoon service account name |
+| `tamnoon-pool-federate` | Workload Identity Pool ID |
+| `tamnoon-aws-federate` | Workload Identity Provider ID |
+| `TamnoonWorkloadIdentityPool` | WIF pool display name |
+| `112665896816` | Tamnoon AWS account ID |
+| `gcp-onboarding-trust-<tamnoon-tenant-id>` | Trusted AWS role name (only the tenant ID portion changes) |
 
 ---
 
