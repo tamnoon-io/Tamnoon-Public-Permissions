@@ -392,42 +392,53 @@ If `roles/logging.privateLogViewer` cannot be assigned, Tamnoon recommends creat
 
 ---
 
-## 7. SCC Coverage via Security Reviewer
+## 7. SCC Coverage
 
-`roles/iam.securityReviewer` includes 22 SCC permissions — sufficient for **investigation scripts** that discover and analyze findings:
+### 7.1 Core SCC Access via Security Reviewer (all CNAPP providers)
 
-| SCC Permission | Capability |
-|----------------|------------|
-| `securitycenter.findings.list` | List threat, vulnerability, and misconfiguration findings |
-| `securitycenter.issues.list` | List SCC issues (grouped findings) |
-| `securitycenter.assets.list` | List SCC asset inventory |
-| `securitycenter.attackpaths.list` | List attack path simulations |
-| `securitycenter.sources.list` | List SCC finding sources |
+`roles/iam.securityReviewer` (included in the standard onboarding roles in Section 2) provides basic SCC access for investigation scripts:
 
-### What `iam.securityReviewer` does NOT include
+| SCC Permission | Capability | Scope |
+|----------------|------------|-------|
+| `securitycenter.findings.list` | List threat, vulnerability, and misconfiguration findings | Project / Folder / Org |
+| `securitycenter.issues.list` | List SCC issues (grouped findings) | Project / Folder / Org |
+| `securitycenter.assets.list` | List SCC asset inventory | Project / Folder / Org |
+| `securitycenter.attackpaths.list` | List attack path simulations | **Org only** |
+| `securitycenter.valuedresources.list` | List valued resources (exposed targets) | **Org only** |
+| `securitycenter.sources.list` | List SCC finding sources | Project / Folder / Org |
 
-The following SCC permissions require `roles/securitycenter.findingsViewer` (which is a superset of `roles/securitycenter.issuesViewer` — never grant both):
+> **Important scope limitation:** `securitycenter.attackpaths.list` and `securitycenter.valuedresources.list` are included in `securityReviewer` but **only function at organization scope**. When the SA is onboarded at project or folder scope, these permissions are ineffective — the investigator cannot read attack paths or valued resources.
 
-| Permission | Capability | When needed |
-|------------|-----------|-------------|
-| `securitycenter.issues.get` | Fetch a specific Issue by ID | Programmatic SCC alert ingestion |
-| `securitycenter.findings.group` | Aggregate findings by category/severity | Dashboard / reporting |
-| `securitycenter.findingexplanations.get` | SCC AI-generated finding explanations | Enriched alert context |
-| `securitycenter.graphs.get` / `.query` | Attack graph traversal | Finding correlation |
-| `securitycenter.issues.group` / `.listFilterValues` | Issue aggregation and filter discovery | Issue-level analytics |
+### 7.2 SCC Investigation Roles (when CNAPP is GCP SCC)
 
-### When to use which role
+When the customer's CNAPP is GCP Security Command Center, the following additional roles are required at **Organization level** to investigate CHOKEPOINT and TOXIC_COMBINATION findings. These are needed regardless of whether the core onboarding is at project, folder, or org scope.
 
-| Use Case | Role | Scope |
-|----------|------|-------|
-| **Investigation scripts** (`--csv-input` driven) | `roles/iam.securityReviewer` (already in onboarding) | Org / Folder / Project |
-| **SCC alert ingestion** (Tamnoon Alerts page) | `roles/securitycenter.findingsViewer` (add to the same SA) | Org or Project (SCC doesn't support folder-level activation) |
+| Role | Title | Key Permissions | Why needed |
+|------|-------|----------------|-----------|
+| `roles/securitycenter.findingsViewer` | Findings Viewer | `findings.list/group`, `findingexplanations.get`, `issues.get`, `graphs.get/query` | Read finding details, explanations, attack graphs |
+| `roles/securitycenter.attackPathsViewer` | Attack Paths Reader | `attackpaths.list`, `exposurepathexplan.get` | Read step-by-step attack chains for CHOKEPOINT findings |
+| `roles/securitycenter.valuedResourcesViewer` | Valued Resources Reader | `valuedresources.list` | Identify which specific resources are exposed (the "many valued resources") |
+| `roles/securitycenter.simulationsViewer` | Simulations Reader | `simulations.get` | Read simulation context for attack exposure analysis |
 
-**Legacy onboarding** (current): `tamnoonpoc@tamnoon.io` user account — add `findingsViewer` to the same user for SCC ingestion.
+**Why these roles are needed:** The SCC findings list endpoint returns findings with an `attackExposure.score` and resource counts (e.g., "26 high-value resources exposed"), but does **not** return which resources are exposed or the attack chain. That data requires the separate attack path, valued resource, and simulation APIs — which only work at org level.
 
-**SA-based onboarding** (May 2026+): A single SA handles both investigation and SCC ingestion. Grant both the onboarding roles and `findingsViewer` — they are additive with minimal overlap.
+**Example:** A CHOKEPOINT finding "Function that exposes many valued resources" tells you the score is 53.5 and 269 resources are exposed. Without the additional roles, the investigator cannot determine:
+- Which 26 high-value resources are at risk
+- What the attack chain looks like (key → function admin → execute as default SA → 28 secrets)
+- Which simulation generated the finding
 
-See [SCC Integration](gcp-scc-integration.md) for setup details.
+### 7.3 Onboarding with SCC as CNAPP
+
+For customers using GCP SCC as their CNAPP, the onboarding deploys:
+
+| Scope | Roles |
+|-------|-------|
+| **Project / Folder / Org** (chosen by customer) | Core investigation roles (Section 2): `viewer`, `browser`, `securityReviewer`, `cloudasset.viewer`, `logging.privateLogViewer`, `serviceusage.serviceUsageConsumer` |
+| **Organization** (required, always) | SCC roles: `findingsViewer`, `attackPathsViewer`, `valuedResourcesViewer`, `simulationsViewer` |
+
+> This means **even for project/folder-scoped onboarding**, the SCC investigation roles must be granted at org level. The Tamnoon onboarding flow should handle this automatically when CNAPP is SCC.
+
+See [SCC Integration](gcp-scc-integration.md) for ingestion-specific setup and verification commands.
 
 ---
 
@@ -436,6 +447,4 @@ See [SCC Integration](gcp-scc-integration.md) for setup details.
 | Integration | Purpose | Configuration | Doc |
 |-------------|---------|---------------|-----|
 | **Google Workspace** | Enrich user/group investigations with identity context (name, OU, status, group membership) | Domain-wide delegation with Admin SDK read-only scopes | [Workspace Integration](gcp-workspace-integration.md) |
-| **SCC Alert Ingestion** | Programmatic ingestion of SCC findings into Tamnoon Alerts page | Dedicated SA with `findingsViewer` at org or project scope | [SCC Integration](gcp-scc-integration.md) |
-
-**Note**: Workspace and SCC Alert Ingestion are the only integrations that require configuration beyond the standard onboarding roles. For investigation scripts, SCC access is already covered by `roles/iam.securityReviewer` at org/folder scope.
+| **SCC Integration** | Ingestion of SCC findings into Tamnoon Alerts page + attack path investigation | `findingsViewer` + `attackPathsViewer` + `valuedResourcesViewer` + `simulationsViewer` at org scope | [SCC Integration](gcp-scc-integration.md) |
