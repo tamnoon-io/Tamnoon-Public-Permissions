@@ -117,9 +117,26 @@ The following roles are required when the CNAPP is GCP SCC and Tamnoon needs to 
 
 > **Why `findingsViewer` alone is insufficient:** The findings list endpoint (`/v2/organizations/{org}/sources/-/findings`) returns the finding with an `attackExposure.score` and resource counts (e.g., 26 high-value, 8 medium-value), but does NOT return which resources are exposed or the attack chain. That data requires the separate attack paths, valued resources, and simulations APIs listed above.
 
+### 3.3 SCC Investigation (Mute Rules, Detection Modules, Notifications)
+
+When investigating SCC findings, Tamnoon scripts detect inconsistencies between mute rules and actual data flows (e.g., a mute rule suppresses "dev" BQ exports but the exported data originates from production). Reading mute rule definitions and detection configurations requires additional permissions.
+
+| Permission | Why needed |
+|-----------|-----------|
+| `securitycenter.muteconfigs.list` | List all mute rules to identify suppressed findings |
+| `securitycenter.muteconfigs.get` | Read mute rule filter to verify scope matches intent |
+| `securitycenter.eventthreatdetectioncustommodules.list` | List custom ETD detection rules — check if customer has custom rules for exfiltration patterns |
+| `securitycenter.notificationconfig.list` | List SCC notification routing — verify findings are routed to the right team (not just muted) |
+
+**Predefined role:** `roles/securitycenter.adminViewer` includes all of the above.
+
+**Scope:** Organization-level (mute rules and ETD modules are org-scoped).
+
+> **Why `findingsViewer` is insufficient:** The `mute` and `muteInitiator` fields in finding JSON tell us a finding IS muted and by WHICH rule, but not the rule's filter definition. Without `muteconfigs.get`, we can infer the rule name from `muteInitiator` but cannot verify the filter matches the intended scope — critical for detecting suppressed production data exfiltration.
+
 ### Least-privilege custom role alternative
 
-If the customer prefers a single custom role instead of 4 predefined roles:
+If the customer prefers a single custom role instead of the predefined roles:
 
 ```yaml
 title: TamnoonSCCReader
@@ -147,6 +164,11 @@ permissions:
   - securitycenter.exposurepathexplan.get
   - securitycenter.valuedresources.list
   - securitycenter.simulations.get
+  # Mute rules, detection config, notifications
+  - securitycenter.muteconfigs.list
+  - securitycenter.muteconfigs.get
+  - securitycenter.eventthreatdetectioncustommodules.list
+  - securitycenter.notificationconfig.list
   # Resource hierarchy
   - resourcemanager.organizations.get
   - resourcemanager.folders.get
@@ -237,6 +259,10 @@ A **single SA** handles both investigation and SCC ingestion. The roles are addi
 | List attack paths (step-by-step attack chains) | `attackPathsViewer` (this doc) |
 | List valued resources (exposed targets) | `valuedResourcesViewer` (this doc) |
 | Read simulation context | `simulationsViewer` (this doc) |
+| Read mute rule definitions | `muteconfigs.list/get` (section 3.3) |
+| Detect suppressed findings with inconsistent scope | `muteconfigs.get` (section 3.3) |
+| List custom ETD detection rules | `eventthreatdetectioncustommodules.list` (section 3.3) |
+| Read notification routing | `notificationconfig.list` (section 3.3) |
 | Read resources, IAM policies, audit logs | Onboarding roles |
 | GKE secrets, container image scanning | `TamnoonSecurityAssessment` (onboarding) |
 
