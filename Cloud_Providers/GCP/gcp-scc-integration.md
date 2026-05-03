@@ -87,13 +87,15 @@ Then grant both the [onboarding roles](gcp-onboarding-permissions.md#2-roles-ass
 
 ---
 
-## 3. Role Assigned to the SA
+## 3. Roles Assigned to the SA
+
+### 3.1 SCC Findings Ingestion
 
 | Role | Purpose |
 |---|---|
-| `roles/securitycenter.findingsViewer` | List and retrieve SCC findings and issues |
+| `roles/securitycenter.findingsViewer` | List and retrieve SCC findings, issues, graphs, and explanations |
 
-**Why this role**: `findingsViewer` is a superset of `issuesViewer` — do not grant both. It provides:
+`findingsViewer` is a superset of `issuesViewer` — do not grant both. It provides:
 
 - `securitycenter.findings.list`, `findings.group`, `findings.listFindingPropertyNames`
 - `securitycenter.issues.list`, `issues.get`, `issues.group`, `issues.listFilterValues`
@@ -102,6 +104,76 @@ Then grant both the [onboarding roles](gcp-onboarding-permissions.md#2-roles-ass
 - `securitycenter.sources.list`, `sources.get`
 - `securitycenter.compliancesnapshots.list`, `vulnerabilitysnapshots.list`
 - `resourcemanager.folders.get`, `organizations.get`, `projects.get`
+
+### 3.2 SCC Investigation (Attack Paths, Valued Resources, Simulations)
+
+The following roles are required when the CNAPP is GCP SCC and Tamnoon needs to investigate CHOKEPOINT and TOXIC_COMBINATION findings. These APIs **only support organization-level access** — project or folder-scoped grants will not work.
+
+| Role | Title | Permissions | Why needed |
+|------|-------|------------|-----------|
+| `roles/securitycenter.attackPathsViewer` | Attack Paths Reader | `securitycenter.attackpaths.list`, `securitycenter.exposurepathexplan.get` | Read step-by-step attack chains — the actual resources in the attack path |
+| `roles/securitycenter.valuedResourcesViewer` | Valued Resources Reader | `securitycenter.valuedresources.list` | Identify which specific resources SCC considers "valued" (the targets in "Function that exposes many valued resources") |
+| `roles/securitycenter.simulationsViewer` | Simulations Reader | `securitycenter.simulations.get` | Read simulation context and metadata for attack exposure analysis |
+
+> **Why `findingsViewer` alone is insufficient:** The findings list endpoint (`/v2/organizations/{org}/sources/-/findings`) returns the finding with an `attackExposure.score` and resource counts (e.g., 26 high-value, 8 medium-value), but does NOT return which resources are exposed or the attack chain. That data requires the separate attack paths, valued resources, and simulations APIs listed above.
+
+### 3.3 SCC Investigation (Mute Rules, Detection Modules, Notifications)
+
+When investigating SCC findings, Tamnoon scripts detect inconsistencies between mute rules and actual data flows (e.g., a mute rule suppresses "dev" BQ exports but the exported data originates from production). Reading mute rule definitions and detection configurations requires additional permissions.
+
+| Permission | Why needed |
+|-----------|-----------|
+| `securitycenter.muteconfigs.list` | List all mute rules to identify suppressed findings |
+| `securitycenter.muteconfigs.get` | Read mute rule filter to verify scope matches intent |
+| `securitycenter.eventthreatdetectioncustommodules.list` | List custom ETD detection rules — check if customer has custom rules for exfiltration patterns |
+| `securitycenter.notificationconfig.list` | List SCC notification routing — verify findings are routed to the right team (not just muted) |
+
+**Predefined role:** `roles/securitycenter.adminViewer` includes all of the above.
+
+**Scope:** Organization-level (mute rules and ETD modules are org-scoped).
+
+> **Why `findingsViewer` is insufficient:** The `mute` and `muteInitiator` fields in finding JSON tell us a finding IS muted and by WHICH rule, but not the rule's filter definition. Without `muteconfigs.get`, we can infer the rule name from `muteInitiator` but cannot verify the filter matches the intended scope — critical for detecting suppressed production data exfiltration.
+
+### Least-privilege custom role alternative
+
+If the customer prefers a single custom role instead of the predefined roles:
+
+```yaml
+title: TamnoonSCCReader
+description: Read-only SCC access for findings ingestion and investigation
+permissions:
+  # Findings ingestion
+  - securitycenter.findings.list
+  - securitycenter.findings.group
+  - securitycenter.findings.listFindingPropertyNames
+  - securitycenter.findingexplanations.get
+  - securitycenter.issues.list
+  - securitycenter.issues.get
+  - securitycenter.issues.group
+  - securitycenter.issues.listFilterValues
+  - securitycenter.sources.list
+  - securitycenter.sources.get
+  - securitycenter.graphs.get
+  - securitycenter.graphs.query
+  - securitycenter.compliancesnapshots.list
+  - securitycenter.vulnerabilitysnapshots.list
+  - securitycenter.complianceReports.aggregate
+  - securitycenter.userinterfacemetadata.get
+  # Attack path investigation
+  - securitycenter.attackpaths.list
+  - securitycenter.exposurepathexplan.get
+  - securitycenter.valuedresources.list
+  - securitycenter.simulations.get
+  # Mute rules, detection config, notifications
+  - securitycenter.muteconfigs.list
+  - securitycenter.muteconfigs.get
+  - securitycenter.eventthreatdetectioncustommodules.list
+  - securitycenter.notificationconfig.list
+  # Resource hierarchy
+  - resourcemanager.organizations.get
+  - resourcemanager.folders.get
+  - resourcemanager.projects.get
+```
 
 ---
 
@@ -122,37 +194,7 @@ gcloud organizations add-iam-policy-binding ORG_ID \
 
 Coverage: All current and future projects in the organization.
 
-### 4.2 Project-Level (Multiple Projects)
-
-Use when SCC is activated per-project (Standard/Premium without org-level activation).
-
-```bash
-SA="serviceAccount:tamnoon-scc-integration@TENANT_PROJECT.iam.gserviceaccount.com"
-
-for PROJECT in project-a project-b project-c; do
-  gcloud projects add-iam-policy-binding "$PROJECT" \
-    --member="$SA" \
-    --role="roles/securitycenter.findingsViewer" \
-    --condition=None
-done
-```
-
-Or from a file (one project ID per line):
-
-```bash
-while IFS= read -r PROJECT; do
-  [[ -z "$PROJECT" || "$PROJECT" =~ ^# ]] && continue
-  gcloud projects add-iam-policy-binding "$PROJECT" \
-    --member="$SA" \
-    --role="roles/securitycenter.findingsViewer" \
-    --condition=None
-done < projects.txt
-```
-
-**Limitations of project-level**:
-- No cross-project attack paths
-- No org-wide asset inventory correlation
-- Must re-run when new projects activate SCC
+> **Organization-level is required.** SCC attack path, valued resource, and simulation APIs only support organization-scoped access. Project-level bindings cannot query these APIs, which limits the value of SCC findings to basic alerts without attack chain context.
 
 ---
 
@@ -214,6 +256,13 @@ A **single SA** handles both investigation and SCC ingestion. The roles are addi
 | List findings for investigation scripts | `iam.securityReviewer` (onboarding) |
 | Fetch individual Issues by ID | `findingsViewer` (this doc) |
 | Finding aggregation, explanations, graph queries | `findingsViewer` (this doc) |
+| List attack paths (step-by-step attack chains) | `attackPathsViewer` (this doc) |
+| List valued resources (exposed targets) | `valuedResourcesViewer` (this doc) |
+| Read simulation context | `simulationsViewer` (this doc) |
+| Read mute rule definitions | `muteconfigs.list/get` (section 3.3) |
+| Detect suppressed findings with inconsistent scope | `muteconfigs.get` (section 3.3) |
+| List custom ETD detection rules | `eventthreatdetectioncustommodules.list` (section 3.3) |
+| Read notification routing | `notificationconfig.list` (section 3.3) |
 | Read resources, IAM policies, audit logs | Onboarding roles |
 | GKE secrets, container image scanning | `TamnoonSecurityAssessment` (onboarding) |
 
@@ -221,13 +270,15 @@ A **single SA** handles both investigation and SCC ingestion. The roles are addi
 
 ## 8. What Tamnoon Ingests
 
-| SCC Data Type | Usage |
-|---------------|-------|
-| **Threat findings** (active) | Correlate with IAM bindings — which identities have access to affected resources |
-| **Vulnerability findings** | Prioritize remediation based on exposure (network access + IAM scope) |
-| **Misconfiguration findings** | Surface compliance gaps (open ports, public access, key rotation) |
-| **Issues** (grouped findings) | Aggregate related findings for investigation prioritization |
-| **Attack paths** | Understand lateral movement risk through IAM role chains |
+| SCC Data Type | Usage | API Endpoint |
+|---------------|-------|-------------|
+| **Threat findings** (active) | Correlate with IAM bindings — which identities have access to affected resources | `findings.list` |
+| **Vulnerability findings** | Prioritize remediation based on exposure (network access + IAM scope) | `findings.list` |
+| **Misconfiguration findings** | Surface compliance gaps (open ports, public access, key rotation) | `findings.list` |
+| **Issues** (grouped findings) | Aggregate related findings for investigation prioritization | `issues.list` |
+| **Attack paths** | Step-by-step attack chains for CHOKEPOINT and TOXIC_COMBINATION findings | `attackPaths.list` |
+| **Valued resources** | Which specific resources are exposed (the "many valued resources" in CHOKEPOINT findings) | `valuedResources.list` |
+| **Simulations** | Attack simulation context and metadata | `simulations.get` |
 
 See also:
 - [GCP Onboarding Permissions](gcp-onboarding-permissions.md) — standard IAM investigation roles
